@@ -36,18 +36,25 @@ if ! command -v docker-compose &> /dev/null; then
 fi
 
 # Get server IP
-if [ -z "$SERVER_IP" ]; then
+if [ -z "$OPENVPN_PUBLIC_IP" ]; then
     SERVER_IP=$(curl -s ifconfig.me)
     print_status "Detected server IP: $SERVER_IP"
+    export OPENVPN_PUBLIC_IP=$SERVER_IP
+else
+    SERVER_IP=$OPENVPN_PUBLIC_IP
+    print_status "Using provided server IP: $SERVER_IP"
 fi
 
 # Create .env file if it doesn't exist
 if [ ! -f .env ]; then
     print_status "Creating .env file..."
     cp .env.example .env
-    sed -i "s/YOUR_SERVER_IP/$SERVER_IP/g" .env
-    print_status "Please review and update .env file if needed."
 fi
+
+# Update .env file with current values
+print_status "Updating .env file with server configuration..."
+sed -i "s/YOUR_SERVER_IP/$SERVER_IP/g" .env
+sed -i "s/OPENVPN_PUBLIC_IP=.*/OPENVPN_PUBLIC_IP=$SERVER_IP/" .env
 
 # Create client-configs directory
 mkdir -p client-configs

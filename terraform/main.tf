@@ -23,11 +23,11 @@ resource "linode_instance" "vpn_server" {
   root_pass       = var.root_password
   tags            = var.tags
 
-  # Install Docker and setup OpenVPN with MFA
+  # Install Docker and setup OpenVPN
   provisioner "remote-exec" {
     inline = [
       "apt-get update",
-      "apt-get install -y docker.io docker-compose git libpam-google-authenticator qrencode",
+      "apt-get install -y docker.io docker-compose git",
       "systemctl start docker",
       "systemctl enable docker",
       "echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf",
@@ -56,7 +56,7 @@ resource "linode_instance" "vpn_server" {
     }
   }
 
-  # Setup and start OpenVPN container with MFA
+  # Setup and start OpenVPN container
   provisioner "remote-exec" {
     inline = [
       "cd /opt/openvpn",
@@ -64,7 +64,6 @@ resource "linode_instance" "vpn_server" {
       "echo \"OPENVPN_PUBLIC_IP=${self.ip_address}\" > .env",
       "echo \"OPENVPN_PORT=1194\" >> .env",
       "echo \"OPENVPN_PROTOCOL=udp\" >> .env",
-      "./setup-mfa.sh",
       "./deploy-docker.sh",
     ]
     connection {
@@ -106,10 +105,9 @@ output "vpn_server_status" {
 output "connection_info" {
   value = {
     ssh_command = "ssh root@${linode_instance.vpn_server.ip_address}"
-    vpn_user_ssh = "ssh vpnuser@${linode_instance.vpn_server.ip_address}"
     openvpn_port = "1194"
     protocol = "UDP"
-    mfa_setup = "QR code and emergency codes available at /home/vpnuser/.google_authenticator"
-    mfa_note = "SSH requires both SSH key AND Google Authenticator token"
+    client_generation = "Run: docker exec openvpn-server /usr/local/bin/generate-client.sh <client-name>"
+    ios_setup = "Download OpenVPN Connect app from App Store"
   }
 }
