@@ -1,0 +1,10 @@
+# For local deployment only - with GitHub Actions, these values come from GitHub secrets
+linode_api_token = "your_linode_api_token_here"  # For GitHub Actions: use LINODE_TOKEN secret
+ssh_public_key   = "ssh-rsa AAAAB3Nz... your_public_key_here"  # For GitHub Actions: use SSH_PUBLIC_KEY secret
+root_password    = "strong_password_here"  # For GitHub Actions: use ROOT_PASSWORD secret
+
+# Configuration options (these can be in the repo since they're not sensitive)
+instance_label   = "my-vpn-server"
+region           = "us-east"  # Change to your preferred region
+instance_type    = "g6-nanode-1"
+tags             = ["personal-vpn"]  # Tags to apply to the instance

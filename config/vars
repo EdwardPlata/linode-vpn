@@ -1,0 +1,46 @@
+# Easy-RSA 2.x configuration
+export EASY_RSA="/etc/openvpn/easy-rsa"
+export OPENSSL="openssl"
+export PKCS11TOOL="pkcs11-tool"
+export GREP="grep"
+
+# This variable should point to the top level of the easy-rsa tree.
+export KEY_CONFIG=`$EASY_RSA/whichopensslcnf $EASY_RSA`
+export KEY_DIR="$EASY_RSA/keys"
+echo NOTE: If you run ./clean-all, I will be doing a rm -rf on $KEY_DIR
+
+# PKCS11 fixes
+export PKCS11_MODULE_PATH="dummy"
+export PKCS11_PIN="dummy"
+
+# Increase this to 2048 if you are paranoid. This will slow down TLS negotiation performance
+export KEY_SIZE=2048
+
+# In how many days should the root CA key expire?
+export CA_EXPIRE=3650
+
+# In how many days should certificates expire?
+export KEY_EXPIRE=3650
+
+# These are the default values for fields which will be placed in the certificate.
+export KEY_COUNTRY="US"
+export KEY_PROVINCE="CA"
+export KEY_CITY="SanFrancisco"
+export KEY_ORG="Fort-Funston"
+export KEY_EMAIL="me@myhost.mydomain"
+export KEY_OU="MyOrganizationalUnit"
+
+# X509 Subject Field
+export KEY_NAME="EasyRSA"
+
+# PKCS11 Smart Card
+export PKCS11_MODULE_PATH="changeme"
+export PKCS11_PIN=1234
+
+# If you'd like to sign all keys with the same Common Name, uncomment the KEY_CN export below
+export KEY_CN=""
+
+# Uncomment if you are using the PKCS#11 patch for OpenVPN 2.1.x and wish to use PKCS#11
+# smart card support
+# export PKCS11_PROTECTED_AUTHENTICATION=1
+# export PKCS11_PRIVATE_MODE=1

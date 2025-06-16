@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  openvpn:
+    build: .
+    container_name: openvpn-server
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "1194:1194/udp"
+    volumes:
+      - openvpn-data:/etc/openvpn/easy-rsa/keys
+      - openvpn-logs:/var/log/openvpn
+      - ./client-configs:/tmp/openvpn-clients
+    environment:
+      - SERVER_IP=${SERVER_IP:-YOUR_SERVER_IP}
+    restart: unless-stopped
+    networks:
+      - openvpn-network
+
+volumes:
+  openvpn-data:
+    driver: local
+  openvpn-logs:
+    driver: local
+
+networks:
+  openvpn-network:
+    driver: bridge
