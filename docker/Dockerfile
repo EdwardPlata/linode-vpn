@@ -28,8 +28,8 @@ WORKDIR /etc/openvpn/easy-rsa
 # Copy configuration files and scripts
 COPY config/vars /etc/openvpn/easy-rsa/vars
 COPY config/server.conf /etc/openvpn/server.conf
-COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-COPY scripts/generate-client.sh /usr/local/bin/generate-client.sh
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY generate-client.sh /usr/local/bin/generate-client.sh
 
 # Make scripts executable
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
