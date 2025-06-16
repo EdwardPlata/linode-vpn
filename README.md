@@ -1,90 +1,162 @@
-# Linode VPN Deployment with Terraform
+# Linode OpenVPN Deployment with Terraform & Docker
 
-This project allows you to quickly deploy a WireGuard VPN server on Linode using Terraform, either locally or via GitHub Actions.
+This project deploys an OpenVPN server on Linode using Terraform and Docker, with easy client configuration generation for Apple devices (iOS/macOS) and other platforms.
 
 ## Prerequisites
 
 - A Linode account and API token
-- Terraform installed (v1.0.0 or later) for local deployment
+- Terraform installed (v1.0.0 or later)
 - SSH key pair
+- OpenVPN Connect app on your Apple device (iOS/macOS)
 
 ## Quick Deployment
 
-For a quick deployment, use the provided deployment script:
-
-1. Update your Linode API token in `terraform/terraform.tfvars`
-2. Run the deployment script:
-   ```
-   ./deploy.sh
-   ```
-3. Follow the prompts to deploy your VPN server
-
-## Local Setup Instructions
-
-1. Clone this repository:
-   ```
+1. **Clone and setup:**
+   ```bash
    git clone https://github.com/yourusername/linode-vpn.git
-   cd linode-vpn
-   ```
-
-2. Navigate to the terraform directory:
-   ```
-   cd terraform
-   ```
-
-3. Copy the example tfvars file and update it with your information:
-   ```
+   cd linode-vpn/terraform
    cp terraform.tfvars.example terraform.tfvars
    ```
-   
-   Edit the `terraform.tfvars` file with your Linode API token, SSH public key, and desired configuration.
 
-4. Initialize Terraform:
+2. **Configure your settings** in `terraform.tfvars`:
+   ```hcl
+   linode_token = "your-linode-api-token"
+   ssh_public_key = "your-ssh-public-key"
+   root_password = "your-secure-password"
    ```
+
+3. **Deploy the infrastructure:**
+   ```bash
    terraform init
-   ```
-
-5. Create a plan and apply it:
-   ```
    terraform plan
    terraform apply
    ```
 
-## GitHub Actions Deployment
+4. **Your VPN server will be deployed!** Note the server IP from the output.
 
-This repository includes a GitHub Actions workflow for automated deployment:
+## 🍎 Connect from Apple Devices (iOS/macOS)
 
-1. Fork this repository to your GitHub account
+### Step 1: Download OpenVPN Connect
+- **iOS**: Download [OpenVPN Connect](https://apps.apple.com/app/openvpn-connect/id590379981) from the App Store
+- **macOS**: Download [OpenVPN Connect](https://openvpn.net/client-connect-vpn-for-mac-os/) from the official website
 
-2. In your GitHub repository settings, add the following secrets:
-   - `LINODE_TOKEN`: Your Linode API token
-   - `ROOT_PASSWORD`: Strong password for root user
-   - `SSH_PUBLIC_KEY`: Your SSH public key
+### Step 2: Generate Client Configuration
+SSH into your server and create a client profile:
+```bash
+# SSH into your server (replace with your server IP)
+ssh root@YOUR_SERVER_IP
 
-3. Push changes to the main branch to trigger the deployment automatically, or use the "Run workflow" button in the Actions tab
+# Generate a client configuration (replace 'my-iphone' with any name)
+docker exec openvpn-server /usr/local/bin/generate-client.sh my-iphone
 
-4. After the deployment completes, you will see the IP address of your VPN server in the GitHub Actions logs.
+# Download the configuration file
+cat /tmp/openvpn-clients/my-iphone.ovpn
+```
 
-5. The WireGuard client configuration will be available on the server at `/root/wireguard-clients/client.conf`. You can retrieve it using SSH:
-   ```
-   ssh root@SERVER_IP "cat /root/wireguard-clients/client.conf" > my-wireguard-config.conf
-   ```
+### Step 3: Import Configuration to Your Apple Device
 
-6. Import this configuration into your WireGuard client on your device to connect to the VPN.
+**For iOS:**
+1. Copy the `.ovpn` file content
+2. Email it to yourself or use AirDrop
+3. Open the email/file on your iPhone/iPad
+4. Tap the `.ovpn` file
+5. Choose "Open in OpenVPN"
+6. Tap the "+" to import
+7. Tap "Connect"
+
+**For macOS:**
+1. Save the `.ovpn` file to your Mac
+2. Double-click the file to open it in OpenVPN Connect
+3. Import the profile
+4. Click "Connect"
+
+### Step 4: Connect to Your VPN
+1. Open the OpenVPN Connect app
+2. Toggle the connection switch to connect
+3. You're now protected by your personal VPN!
+
+## 🖥️ Connect from Other Devices
+
+### Windows/Linux/Android
+1. Install OpenVPN client for your platform
+2. Generate a client configuration (Step 2 above)
+3. Import the `.ovpn` file
+4. Connect
+
+## Server Management
+
+### Check VPN Status
+```bash
+ssh root@YOUR_SERVER_IP
+docker ps                           # Check if container is running
+docker logs openvpn-server          # View server logs
+```
+
+### Generate Additional Client Configurations
+```bash
+# Generate config for another device
+docker exec openvpn-server /usr/local/bin/generate-client.sh my-laptop
+docker exec openvpn-server /usr/local/bin/generate-client.sh my-android
+
+# List all client configurations
+ls /tmp/openvpn-clients/
+```
+
+### Restart VPN Server
+```bash
+docker restart openvpn-server
+```
+
+## Troubleshooting
+
+### Container Won't Start
+```bash
+# Check container status
+docker ps -a
+
+# View detailed logs
+docker logs openvpn-server
+
+# Restart with clean state
+docker stop openvpn-server
+docker rm openvpn-server
+cd /root/docker
+docker-compose up -d --build
+```
+
+### Can't Connect from Apple Device
+1. Ensure you're using the **OpenVPN Connect** app (not other OpenVPN apps)
+2. Check that your server IP is correct in the `.ovpn` file
+3. Verify the server is running: `docker ps`
+4. Check firewall: `iptables -L` and `ufw status`
+
+### Performance Issues
+- Try different OpenVPN protocols/ports in the server configuration
+- Check server resources: `htop` or `docker stats`
 
 ## Security Considerations
 
-- The default configuration opens SSH (port 22) and WireGuard VPN (port 51820) ports only
-- Consider changing the default passwords and SSH keys in production environments
-- For enhanced security, consider setting up additional firewall rules or fail2ban
+- Default OpenVPN port: **1194/UDP**
+- SSH access: **Port 22** (consider changing in production)
+- All VPN traffic is encrypted with **AES-256-CBC**
+- TLS authentication provides additional security layer
+- Consider setting up fail2ban for SSH protection
 
-## Customization
+## Technical Details
 
-You can customize the deployment by modifying the following files:
-- `variables.tf`: Adjust default values for instance type, region, etc.
-- `main.tf`: Modify the Linode instance configuration or add additional resources
-- `scripts/setup-wireguard.sh`: Customize the WireGuard VPN configuration
+- **OS**: Ubuntu 22.04 LTS
+- **VPN Software**: OpenVPN 2.6+
+- **Containerization**: Docker
+- **Certificate Authority**: Easy-RSA 3.x
+- **VPN Network**: 10.8.0.0/24
+- **DNS Servers**: Google DNS (8.8.8.8, 8.8.4.4)
+
+## Cost Estimation
+
+- **Linode Nanode 1GB**: ~$5/month
+- **Bandwidth**: 1TB included (plenty for personal VPN use)
+- **Total**: ~$5/month for unlimited personal VPN access
 
 ## License
 
-MIT
+MIT License - Feel free to modify and distribute!
