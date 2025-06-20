@@ -11,10 +11,27 @@ fi
 # Set Terraform variables from environment variables
 export TF_VAR_linode_api_token="$LINODE_TOKEN"
 
-# If root password is not explicitly set, use a default one (change in production)
+# If root password is not explicitly set, prompt for it
 if [ -z "$TF_VAR_root_password" ]; then
-  export TF_VAR_root_password="StrongPassword123!"
-  echo "WARNING: Using default root password. For production, set TF_VAR_root_password environment variable"
+  echo "⚠️  WARNING: TF_VAR_root_password environment variable is not set"
+  echo "Please set a strong root password:"
+  read -s -p "Enter root password: " root_password
+  echo
+  read -s -p "Confirm root password: " root_password_confirm
+  echo
+  
+  if [ "$root_password" != "$root_password_confirm" ]; then
+    echo "❌ ERROR: Passwords do not match"
+    exit 1
+  fi
+  
+  if [ ${#root_password} -lt 12 ]; then
+    echo "❌ ERROR: Password must be at least 12 characters long"
+    exit 1
+  fi
+  
+  export TF_VAR_root_password="$root_password"
+  echo "✅ Password set successfully"
 fi
 
 # Navigate to terraform directory

@@ -2,12 +2,50 @@
 
 This project deploys an OpenVPN server on Linode using Terraform and Docker, with easy client configuration generation for Apple devices (iOS/macOS) and other platforms.
 
+## 🔒 Security Notice
+
+**NEVER commit credentials to git!** This repository is configured to ignore sensitive files, but always verify before committing:
+- API tokens
+- SSH private keys
+- Passwords
+- Client VPN configurations (.ovpn files)
+
 ## Prerequisites
 
 - A Linode account and API token
 - Terraform installed (v1.0.0 or later)
 - SSH key pair
 - OpenVPN Connect app on your Apple device (iOS/macOS)
+
+## 🔧 Environment Setup (IMPORTANT)
+
+### For Local Development:
+1. **Copy the example file:**
+   ```bash
+   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+   ```
+
+2. **Set your credentials securely:**
+   ```bash
+   # Option 1: Use environment variables (recommended)
+   export TF_VAR_linode_api_token="your-linode-token"
+   export TF_VAR_ssh_public_key="$(cat ~/.ssh/id_rsa.pub)"
+   export TF_VAR_root_password="your-secure-password"
+   
+   # Option 2: Edit terraform.tfvars (but NEVER commit it)
+   # Edit terraform/terraform.tfvars with your actual values
+   ```
+
+3. **VERIFY your credentials are not in git:**
+   ```bash
+   git status  # terraform.tfvars should NOT appear here
+   ```
+
+### For GitHub Actions:
+Set these as GitHub repository secrets:
+- `LINODE_TOKEN`: Your Linode API token
+- `SSH_PUBLIC_KEY`: Your SSH public key
+- `ROOT_PASSWORD`: Server root password
 
 ## Quick Deployment
 

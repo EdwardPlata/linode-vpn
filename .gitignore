@@ -23,10 +23,93 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# SSH keys
+# SSH keys and certificates
 *.pem
-id_rsa*
 *.key
+*.crt
+*.csr
+id_rsa*
+id_ed25519*
+id_ecdsa*
 
-# Environment variables
+# Environment variables and secrets
 .env
+.env.local
+.env.production
+secrets.*
+*.secret
+
+# OpenVPN client configurations (contain private keys)
+*.ovpn
+client-configs/
+*/client-configs/
+
+# Docker volumes with sensitive data
+openvpn-data/
+openvpn-logs/
+
+# Backup files that might contain sensitive data
+*.backup
+*.bak
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Additional security entries
+# API tokens and credentials files
+linode_token.txt
+api_tokens.txt
+credentials.txt
+passwords.txt
+config.json
+
+# Additional SSH and certificate files
+*.p12
+*.pfx
+known_hosts
+authorized_keys
+
+# Local configuration that might contain secrets
+terraform.tfvars
+terraform.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+variables.local.tf
+config.local.*
+
+# IDE and editor files that might contain sensitive data
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Logs that might contain sensitive information
+*.log
+logs/
+tmp/
+temp/
+
+# Database files that might contain sensitive data
+*.db
+*.sqlite
+*.sqlite3
+
+# Application-specific sensitive files
+.secrets/
+private/
+sensitive/
+
+# Terraform provider credentials
+~/.terraform.d/credentials.tfrc.json
+~/.terraformrc
+
+# Docker secrets and configs
+docker-compose.override.yml
+.docker/
