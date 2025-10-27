@@ -86,12 +86,20 @@ print_status "Waiting for services to initialize..."
 sleep 15
 
 print_status "Waiting for Pi-hole to be ready..."
+PIHOLE_READY=false
 for i in {1..30}; do
     if docker-compose exec -T pihole pihole status &> /dev/null; then
+        PIHOLE_READY=true
         break
     fi
     sleep 2
 done
+
+if [ "$PIHOLE_READY" = false ]; then
+    print_error "Pi-hole failed to become ready after 60 seconds"
+    print_warning "Check logs with: docker-compose logs pihole"
+    exit 1
+fi
 
 print_status "Waiting for OpenVPN to be ready..."
 sleep 15

@@ -189,13 +189,18 @@ docker-compose up -d --build
 ## Security Considerations
 
 - Default OpenVPN port: **1194/UDP**
-- Pi-hole web interface: **Port 80** (consider SSL in production)
+- Pi-hole web interface: **Port 80 (HTTP)** 
+  - ⚠️ **Security Warning**: HTTP is unencrypted. For production use:
+    - Use SSH tunnel: `ssh -L 8080:localhost:80 root@SERVER_IP` then access at `http://localhost:8080/admin`
+    - Or set up nginx reverse proxy with Let's Encrypt SSL
+    - Or restrict access to trusted IPs via firewall rules
 - SSH access: **Port 22** (consider changing in production)
 - All VPN traffic is encrypted with **AES-256-CBC**
 - TLS authentication provides additional security layer
 - Pi-hole blocks malicious domains for added security
 - Consider setting up fail2ban for SSH protection
 - Use strong Pi-hole admin password (auto-generated during deployment)
+- Never expose Pi-hole web interface to public internet without SSL
 
 ## Technical Details
 

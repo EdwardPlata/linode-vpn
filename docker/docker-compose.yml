@@ -11,8 +11,8 @@ services:
       - "80:80/tcp"
     environment:
       - TZ=${TZ:-America/New_York}
-      - WEBPASSWORD=${PIHOLE_PASSWORD:-admin}
-      - SERVERIP=${SERVER_IP:-0.0.0.0}
+      - WEBPASSWORD=${PIHOLE_PASSWORD:-}
+      - SERVERIP=${SERVER_IP:-}
       - DNS1=1.1.1.1
       - DNS2=1.0.0.1
       - DNSMASQ_LISTENING=all

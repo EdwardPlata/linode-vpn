@@ -81,7 +81,7 @@ resource "linode_instance" "vpn_server" {
       "apt-get install -y ufw",
       "ufw allow 22/tcp",
       "ufw allow 1194/udp", # OpenVPN port
-      "ufw allow 80/tcp",   # Pi-hole web interface
+      "ufw allow 80/tcp",   # Pi-hole web interface (HTTP - consider HTTPS in production)
       "ufw --force enable",
     ]
     connection {
