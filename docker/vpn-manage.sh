@@ -36,7 +36,7 @@ print_pihole_header() {
 get_env_var() {
     local var_name=$1
     if [ -f ".env" ]; then
-        grep "^${var_name}=" .env | cut -d '=' -f2
+        grep "^${var_name}=" .env | cut -d '=' -f2-
     fi
 }
 
@@ -168,9 +168,9 @@ pihole_status() {
 
 pihole_password() {
     print_pihole_header "Pi-hole Admin Password"
-    print_warning "⚠️  This will display sensitive credentials in plain text!"
-    echo -n "Continue? [y/N] "
-    read -r confirm
+    echo "⚠️  This will display sensitive credentials in plain text!" >&2
+    echo -n "Continue? [y/N] " >&2
+    read -r -t 30 confirm || { print_status "Timeout or EOF - Cancelled"; return; }
     
     if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
         print_status "Cancelled"
