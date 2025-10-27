@@ -75,12 +75,13 @@ resource "linode_instance" "vpn_server" {
     }
   }
 
-  # Configure firewall for OpenVPN
+  # Configure firewall for OpenVPN and Pi-hole
   provisioner "remote-exec" {
     inline = [
       "apt-get install -y ufw",
       "ufw allow 22/tcp",
       "ufw allow 1194/udp", # OpenVPN port
+      "ufw allow 80/tcp",   # Pi-hole web interface (HTTP - consider HTTPS in production)
       "ufw --force enable",
     ]
     connection {
@@ -107,6 +108,8 @@ output "connection_info" {
     ssh_command = "ssh root@${linode_instance.vpn_server.ip_address}"
     openvpn_port = "1194"
     protocol = "UDP"
+    pihole_url = "http://${linode_instance.vpn_server.ip_address}/admin"
+    pihole_note = "Pi-hole provides DNS-based ad-blocking for all VPN clients"
     client_generation = "Run: docker exec openvpn-server /usr/local/bin/generate-client.sh <client-name>"
     ios_setup = "Download OpenVPN Connect app from App Store"
   }

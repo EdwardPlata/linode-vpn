@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# OpenVPN Docker Deployment Script
+# OpenVPN + Pi-hole Docker Deployment Script
 
 set -e
 
@@ -8,6 +8,7 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Function to print colored output
@@ -21,6 +22,12 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_title() {
+    echo -e "${BLUE}======================================${NC}"
+    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}======================================${NC}"
 }
 
 # Check if Docker is installed
@@ -49,39 +56,85 @@ fi
 if [ ! -f .env ]; then
     print_status "Creating .env file..."
     cp .env.example .env
+    
+    # Generate a random password for Pi-hole if not set
+    RANDOM_PASSWORD=$(openssl rand -base64 12)
+    sed -i "s/PIHOLE_PASSWORD=changeme/PIHOLE_PASSWORD=$RANDOM_PASSWORD/" .env
+    print_warning "Generated Pi-hole password: $RANDOM_PASSWORD"
+    print_warning "Save this password! You'll need it to access Pi-hole web interface."
 fi
 
 # Update .env file with current values
 print_status "Updating .env file with server configuration..."
 sed -i "s/YOUR_SERVER_IP/$SERVER_IP/g" .env
-sed -i "s/OPENVPN_PUBLIC_IP=.*/OPENVPN_PUBLIC_IP=$SERVER_IP/" .env
+sed -i "s/SERVER_IP=.*/SERVER_IP=$SERVER_IP/" .env
 
 # Create client-configs directory
 mkdir -p client-configs
 
-# Build and start the OpenVPN server
+print_title "Building and Starting Services"
+
+# Build and start the services
 print_status "Building OpenVPN Docker image..."
 docker-compose build
 
-print_status "Starting OpenVPN server..."
+print_status "Starting Pi-hole and OpenVPN services..."
 docker-compose up -d
 
-# Wait for the server to start
-print_status "Waiting for OpenVPN server to initialize..."
-sleep 30
+# Wait for the services to start
+print_status "Waiting for services to initialize..."
+sleep 15
 
-# Check if the container is running
+print_status "Waiting for Pi-hole to be ready..."
+PIHOLE_READY=false
+for i in {1..30}; do
+    if docker-compose exec -T pihole pihole status &> /dev/null; then
+        PIHOLE_READY=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$PIHOLE_READY" = false ]; then
+    print_error "Pi-hole failed to become ready after 60 seconds"
+    print_warning "Check logs with: docker-compose logs pihole"
+    exit 1
+fi
+
+print_status "Waiting for OpenVPN to be ready..."
+sleep 15
+
+# Check if the containers are running
 if docker-compose ps | grep -q "Up"; then
-    print_status "OpenVPN server is running successfully!"
-    print_status "Server IP: $SERVER_IP"
-    print_status "Port: 1194/UDP"
+    print_title "Deployment Successful!"
+    
+    echo -e "${GREEN}✓ OpenVPN Server:${NC}"
+    echo "  - Server IP: $SERVER_IP"
+    echo "  - Port: 1194/UDP"
+    echo "  - DNS: Pi-hole (Ad-blocking enabled)"
     echo
-    print_status "To generate a client certificate, run:"
-    echo "  docker-compose exec openvpn /usr/local/bin/generate-client.sh <client-name>"
+    
+    echo -e "${GREEN}✓ Pi-hole Ad-Blocker:${NC}"
+    echo "  - Web Interface: http://$SERVER_IP/admin"
+    PIHOLE_PASS=$(grep PIHOLE_PASSWORD .env | cut -d '=' -f2)
+    echo "  - Password: $PIHOLE_PASS"
+    echo "  - DNS Server: 10.8.1.2 (internal)"
     echo
-    print_status "To view logs, run:"
-    echo "  docker-compose logs -f"
+    
+    echo -e "${BLUE}Next Steps:${NC}"
+    echo "1. Generate a client certificate:"
+    echo "   docker-compose exec openvpn /usr/local/bin/generate-client.sh <client-name>"
+    echo
+    echo "2. Access Pi-hole admin panel to customize blocklists:"
+    echo "   http://$SERVER_IP/admin"
+    echo
+    echo "3. View logs:"
+    echo "   docker-compose logs -f"
+    echo
+    
+    print_warning "Note: Pi-hole port 80 is exposed for admin interface."
+    print_warning "Consider using a reverse proxy with SSL in production."
 else
-    print_error "OpenVPN server failed to start. Check logs with: docker-compose logs"
+    print_error "Services failed to start. Check logs with: docker-compose logs"
     exit 1
 fi

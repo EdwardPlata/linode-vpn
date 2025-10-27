@@ -1,6 +1,19 @@
-# Linode OpenVPN Deployment with Terraform & Docker
+# Linode OpenVPN Deployment with Pi-hole Ad-Blocking
 
-This project deploys an OpenVPN server on Linode using Terraform and Docker, with easy client configuration generation for Apple devices (iOS/macOS) and other platforms.
+This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Linode using Terraform and Docker. Enjoy a private VPN with network-wide ad blocking, tracker blocking, and enhanced privacy for all your devices.
+
+## ✨ Features
+
+- 🔒 **Secure OpenVPN Server** - Industry-standard VPN with AES-256 encryption
+- 🚫 **Network-Wide Ad Blocking** - Pi-hole blocks ads, trackers, and malicious domains at the DNS level
+- 🍎 **Easy Apple Device Setup** - Simple configuration for iOS and macOS
+- 🌐 **All Devices Protected** - Blocks ads on phones, tablets, computers, smart TVs, and more
+- 📊 **Web Management Interface** - Pi-hole dashboard to monitor and configure blocking
+- 💰 **Cost-Effective** - Run your own VPN + ad-blocker for ~$5/month
+
+## 🚀 Quick Start
+
+**New to this project?** Check out the [Quick Start Guide](QUICKSTART.md) for step-by-step deployment instructions.
 
 ## 🔒 Security Notice
 
@@ -111,7 +124,12 @@ cat /tmp/openvpn-clients/my-iphone.ovpn
 ### Step 4: Connect to Your VPN
 1. Open the OpenVPN Connect app
 2. Toggle the connection switch to connect
-3. You're now protected by your personal VPN!
+3. You're now protected by your personal VPN with ad-blocking!
+
+### Step 5: Verify Ad-Blocking is Working
+1. While connected to VPN, visit: http://ads-blocker.com/testing/
+2. You should see ads being blocked
+3. Check Pi-hole dashboard at http://YOUR_SERVER_IP/admin to see blocked queries
 
 ## 🖥️ Connect from Other Devices
 
@@ -175,19 +193,75 @@ docker-compose up -d --build
 ## Security Considerations
 
 - Default OpenVPN port: **1194/UDP**
+- Pi-hole web interface: **Port 80 (HTTP)** 
+  - ⚠️ **Security Warning**: HTTP is unencrypted. For production use:
+    - Use SSH tunnel: `ssh -L 8080:localhost:80 root@SERVER_IP` then access at `http://localhost:8080/admin`
+    - Or set up nginx reverse proxy with Let's Encrypt SSL
+    - Or restrict access to trusted IPs via firewall rules
 - SSH access: **Port 22** (consider changing in production)
 - All VPN traffic is encrypted with **AES-256-CBC**
 - TLS authentication provides additional security layer
+- Pi-hole blocks malicious domains for added security
 - Consider setting up fail2ban for SSH protection
+- Use strong Pi-hole admin password (auto-generated during deployment)
+- Never expose Pi-hole web interface to public internet without SSL
 
 ## Technical Details
 
 - **OS**: Ubuntu 22.04 LTS
 - **VPN Software**: OpenVPN 2.6+
-- **Containerization**: Docker
+- **Ad-Blocking**: Pi-hole (DNS-based filtering)
+- **Containerization**: Docker & Docker Compose
 - **Certificate Authority**: Easy-RSA 3.x
 - **VPN Network**: 10.8.0.0/24
-- **DNS Servers**: Google DNS (8.8.8.8, 8.8.4.4)
+- **DNS Server**: Pi-hole (10.8.1.2) with Cloudflare DNS upstream
+- **Encryption**: AES-256-CBC with TLS authentication
+
+## Ad-Blocking with Pi-hole
+
+### What is Pi-hole?
+
+Pi-hole is a DNS-based ad-blocker that blocks ads at the network level before they even reach your devices:
+
+- **Blocks Ads Everywhere**: Works on all apps and websites
+- **Blocks Trackers**: Prevents tracking across the web
+- **Faster Browsing**: Pages load faster without ads
+- **Saves Bandwidth**: Reduces data usage
+- **Privacy Protection**: Prevents data collection
+
+### How It Works
+
+1. Your device connects to the VPN
+2. All DNS queries go through Pi-hole
+3. Pi-hole checks domain against blocklists
+4. Ads and trackers are blocked, legitimate traffic passes through
+5. You browse the web ad-free!
+
+### Managing Pi-hole
+
+Access the Pi-hole web interface:
+```
+http://YOUR_SERVER_IP/admin
+```
+
+Use the password generated during deployment (found in the deployment output).
+
+**Pi-hole Dashboard Features:**
+- View real-time query statistics
+- Add custom blocklists
+- Whitelist/blacklist specific domains
+- See top blocked domains
+- Monitor query logs
+
+### Default Blocklists
+
+Pi-hole comes pre-configured with popular blocklists that block:
+- Advertising domains
+- Tracking and analytics
+- Malware and phishing sites
+- Cryptomining scripts
+
+You can add more blocklists through the web interface under Settings → Blocklists.
 
 ## Cost Estimation
 

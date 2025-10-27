@@ -84,6 +84,10 @@ export TF_VAR_server_region="us-east"
 - [ ] Keep server software updated
 - [ ] Use fail2ban for SSH protection
 - [ ] Consider changing default SSH port
+- [ ] **Secure Pi-hole web interface**: Do not expose HTTP port 80 to public internet
+  - Use SSH tunnel for access: `ssh -L 8080:localhost:80 root@SERVER_IP`
+  - Or set up reverse proxy with SSL (nginx + Let's Encrypt)
+  - Or restrict port 80 to trusted IPs via firewall
 
 ### 8. **Safe Environment Variable Storage**
 
