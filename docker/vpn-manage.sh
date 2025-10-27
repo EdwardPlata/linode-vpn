@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# OpenVPN Client Management Script
+# OpenVPN + Pi-hole Management Script
 
 set -e
 
@@ -9,6 +9,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 print_status() {
@@ -27,22 +28,35 @@ print_header() {
     echo -e "${BLUE}[OPENVPN]${NC} $1"
 }
 
+print_pihole_header() {
+    echo -e "${CYAN}[PI-HOLE]${NC} $1"
+}
+
 show_usage() {
     echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo
-    echo "Commands:"
+    echo "OpenVPN Commands:"
     echo "  create <client-name>     Create a new client certificate"
     echo "  list                     List all client certificates"
     echo "  revoke <client-name>     Revoke a client certificate"
-    echo "  status                   Show OpenVPN server status"
-    echo "  logs                     Show OpenVPN server logs"
-    echo "  restart                  Restart OpenVPN server"
+    echo "  status                   Show server status (OpenVPN + Pi-hole)"
+    echo "  logs [service]           Show logs (openvpn, pihole, or all)"
+    echo "  restart [service]        Restart services (openvpn, pihole, or all)"
+    echo
+    echo "Pi-hole Commands:"
+    echo "  pihole-status            Show Pi-hole status and statistics"
+    echo "  pihole-password          Show Pi-hole admin password"
+    echo "  pihole-update            Update Pi-hole blocklists"
+    echo "  pihole-whitelist <domain> Add domain to whitelist"
+    echo "  pihole-blacklist <domain> Add domain to blacklist"
     echo
     echo "Examples:"
     echo "  $0 create john-laptop"
     echo "  $0 list"
-    echo "  $0 revoke john-laptop"
     echo "  $0 status"
+    echo "  $0 logs pihole"
+    echo "  $0 pihole-status"
+    echo "  $0 pihole-whitelist example.com"
 }
 
 create_client() {
@@ -85,22 +99,113 @@ list_clients() {
 }
 
 show_status() {
-    print_header "OpenVPN Server Status"
+    print_header "Service Status"
     docker-compose ps
     echo
     print_header "Container Resource Usage"
     docker stats --no-stream $(docker-compose ps -q)
+    echo
+    
+    print_pihole_header "Pi-hole Quick Stats"
+    docker-compose exec -T pihole pihole -c -e || print_warning "Could not fetch Pi-hole stats"
 }
 
 show_logs() {
-    print_header "OpenVPN Server Logs"
-    docker-compose logs -f
+    local service=$1
+    
+    if [ -z "$service" ] || [ "$service" = "all" ]; then
+        print_header "Showing all logs (Ctrl+C to exit)"
+        docker-compose logs -f
+    elif [ "$service" = "openvpn" ]; then
+        print_header "OpenVPN Logs (Ctrl+C to exit)"
+        docker-compose logs -f openvpn
+    elif [ "$service" = "pihole" ]; then
+        print_pihole_header "Pi-hole Logs (Ctrl+C to exit)"
+        docker-compose logs -f pihole
+    else
+        print_error "Unknown service: $service"
+        print_status "Available services: openvpn, pihole, all"
+        exit 1
+    fi
 }
 
 restart_server() {
-    print_status "Restarting OpenVPN server..."
-    docker-compose restart
-    print_status "OpenVPN server restarted"
+    local service=$1
+    
+    if [ -z "$service" ] || [ "$service" = "all" ]; then
+        print_status "Restarting all services..."
+        docker-compose restart
+        print_status "All services restarted"
+    elif [ "$service" = "openvpn" ]; then
+        print_status "Restarting OpenVPN..."
+        docker-compose restart openvpn
+        print_status "OpenVPN restarted"
+    elif [ "$service" = "pihole" ]; then
+        print_status "Restarting Pi-hole..."
+        docker-compose restart pihole
+        print_status "Pi-hole restarted"
+    else
+        print_error "Unknown service: $service"
+        print_status "Available services: openvpn, pihole, all"
+        exit 1
+    fi
+}
+
+pihole_status() {
+    print_pihole_header "Pi-hole Status"
+    docker-compose exec pihole pihole status
+    echo
+    print_pihole_header "Pi-hole Statistics"
+    docker-compose exec pihole pihole -c -e
+}
+
+pihole_password() {
+    print_pihole_header "Pi-hole Admin Password"
+    if [ -f ".env" ]; then
+        password=$(grep PIHOLE_PASSWORD .env | cut -d '=' -f2)
+        if [ -n "$password" ]; then
+            echo "  Password: $password"
+            echo "  Web Interface: http://$(grep SERVER_IP .env | cut -d '=' -f2)/admin"
+        else
+            print_warning "No password set in .env file"
+        fi
+    else
+        print_error ".env file not found"
+    fi
+}
+
+pihole_update() {
+    print_pihole_header "Updating Pi-hole blocklists..."
+    docker-compose exec pihole pihole -g
+    print_status "Pi-hole blocklists updated"
+}
+
+pihole_whitelist() {
+    local domain=$1
+    
+    if [ -z "$domain" ]; then
+        print_error "Domain is required"
+        echo "Usage: $0 pihole-whitelist <domain>"
+        exit 1
+    fi
+    
+    print_pihole_header "Adding $domain to whitelist..."
+    docker-compose exec pihole pihole -w "$domain"
+    print_status "Domain added to whitelist"
+}
+
+pihole_blacklist() {
+    local domain=$1
+    
+    if [ -z "$domain" ]; then
+        print_error "Domain is required"
+        echo "Usage: $0 pihole-blacklist <domain>"
+        exit 1
+    fi
+    
+    print_pihole_header "Adding $domain to blacklist..."
+    docker-compose exec pihole pihole -b "$domain"
+    print_status "Domain added to blacklist"
 }
 
 # Main script logic
@@ -115,10 +220,25 @@ case "$1" in
         show_status
         ;;
     "logs")
-        show_logs
+        show_logs "$2"
         ;;
     "restart")
-        restart_server
+        restart_server "$2"
+        ;;
+    "pihole-status")
+        pihole_status
+        ;;
+    "pihole-password")
+        pihole_password
+        ;;
+    "pihole-update")
+        pihole_update
+        ;;
+    "pihole-whitelist")
+        pihole_whitelist "$2"
+        ;;
+    "pihole-blacklist")
+        pihole_blacklist "$2"
         ;;
     "help"|"--help"|"-h")
         show_usage

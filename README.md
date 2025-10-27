@@ -11,6 +11,10 @@ This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Li
 - 📊 **Web Management Interface** - Pi-hole dashboard to monitor and configure blocking
 - 💰 **Cost-Effective** - Run your own VPN + ad-blocker for ~$5/month
 
+## 🚀 Quick Start
+
+**New to this project?** Check out the [Quick Start Guide](QUICKSTART.md) for step-by-step deployment instructions.
+
 ## 🔒 Security Notice
 
 **NEVER commit credentials to git!** This repository is configured to ignore sensitive files, but always verify before committing:
