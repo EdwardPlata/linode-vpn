@@ -1,6 +1,34 @@
 version: '3.8'
 
 services:
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    hostname: pihole
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "80:80/tcp"
+    environment:
+      - TZ=${TZ:-America/New_York}
+      - WEBPASSWORD=${PIHOLE_PASSWORD:-admin}
+      - SERVERIP=${SERVER_IP:-0.0.0.0}
+      - DNS1=1.1.1.1
+      - DNS2=1.0.0.1
+      - DNSMASQ_LISTENING=all
+    volumes:
+      - pihole-data:/etc/pihole
+      - pihole-dnsmasq:/etc/dnsmasq.d
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+    networks:
+      openvpn-network:
+        ipv4_address: 10.8.1.2
+    dns:
+      - 127.0.0.1
+      - 1.1.1.1
+
   openvpn:
     build: .
     container_name: openvpn-server
@@ -14,7 +42,10 @@ services:
       - ./client-configs:/tmp/openvpn-clients
     environment:
       - SERVER_IP=${SERVER_IP:-YOUR_SERVER_IP}
+      - PIHOLE_IP=10.8.1.2
     restart: unless-stopped
+    depends_on:
+      - pihole
     networks:
       - openvpn-network
 
@@ -23,7 +54,14 @@ volumes:
     driver: local
   openvpn-logs:
     driver: local
+  pihole-data:
+    driver: local
+  pihole-dnsmasq:
+    driver: local
 
 networks:
   openvpn-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 10.8.1.0/24
