@@ -32,20 +32,27 @@ print_pihole_header() {
     echo -e "${CYAN}[PI-HOLE]${NC} $1"
 }
 
+# Helper function to get environment variable from .env file
+get_env_var() {
+    local var_name=$1
+    if [ -f ".env" ]; then
+        grep "^${var_name}=" .env | cut -d '=' -f2
+    fi
+}
+
 show_usage() {
     echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo
     echo "OpenVPN Commands:"
     echo "  create <client-name>     Create a new client certificate"
     echo "  list                     List all client certificates"
-    echo "  revoke <client-name>     Revoke a client certificate"
     echo "  status                   Show server status (OpenVPN + Pi-hole)"
     echo "  logs [service]           Show logs (openvpn, pihole, or all)"
     echo "  restart [service]        Restart services (openvpn, pihole, or all)"
     echo
     echo "Pi-hole Commands:"
     echo "  pihole-status            Show Pi-hole status and statistics"
-    echo "  pihole-password          Show Pi-hole admin password"
+    echo "  pihole-password          Show Pi-hole admin password (use with caution)"
     echo "  pihole-update            Update Pi-hole blocklists"
     echo "  pihole-whitelist <domain> Add domain to whitelist"
     echo "  pihole-blacklist <domain> Add domain to blacklist"
@@ -161,16 +168,26 @@ pihole_status() {
 
 pihole_password() {
     print_pihole_header "Pi-hole Admin Password"
-    if [ -f ".env" ]; then
-        password=$(grep PIHOLE_PASSWORD .env | cut -d '=' -f2)
-        if [ -n "$password" ]; then
-            echo "  Password: $password"
-            echo "  Web Interface: http://$(grep SERVER_IP .env | cut -d '=' -f2)/admin"
-        else
-            print_warning "No password set in .env file"
+    print_warning "⚠️  This will display sensitive credentials in plain text!"
+    echo -n "Continue? [y/N] "
+    read -r confirm
+    
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        print_status "Cancelled"
+        return
+    fi
+    
+    echo
+    password=$(get_env_var "PIHOLE_PASSWORD")
+    server_ip=$(get_env_var "SERVER_IP")
+    
+    if [ -n "$password" ]; then
+        echo "  Password: $password"
+        if [ -n "$server_ip" ]; then
+            echo "  Web Interface: http://${server_ip}/admin"
         fi
     else
-        print_error ".env file not found"
+        print_warning "No password set in .env file"
     fi
 }
 
