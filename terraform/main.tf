@@ -10,7 +10,10 @@ terraform {
 
 provider "linode" {
   token = var.linode_api_token
-  # Token will be provided via GitHub secret LINODE_TOKEN
+  # Token can be provided via:
+  # - GitHub Actions: LINODE_TOKEN_2025 secret
+  # - Codespaces: LINODE_PAT secret
+  # - Local: terraform.tfvars file or TF_VAR_linode_api_token env var
 }
 
 # Create a Linode instance for our VPN server
@@ -19,7 +22,7 @@ resource "linode_instance" "vpn_server" {
   image           = var.instance_image
   region          = var.region
   type            = var.instance_type
-  authorized_keys = [var.ssh_public_key]
+  authorized_keys = length(trimspace(var.ssh_public_key)) > 0 ? [trimspace(var.ssh_public_key)] : null
   root_pass       = var.root_password
   tags            = var.tags
 

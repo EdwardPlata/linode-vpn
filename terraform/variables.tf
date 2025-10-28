@@ -2,6 +2,11 @@ variable "linode_api_token" {
   description = "Linode API token"
   type        = string
   sensitive   = true
+  
+  validation {
+    condition     = length(trimspace(var.linode_api_token)) > 0
+    error_message = "Linode API token cannot be empty or null. Please ensure LINODE_PAT is set in Codespaces secrets OR LINODE_TOKEN_2025 secret is set in GitHub repository settings."
+  }
 }
 
 variable "instance_label" {
@@ -31,12 +36,32 @@ variable "instance_type" {
 variable "ssh_public_key" {
   description = "SSH public key for accessing the Linode instance"
   type        = string
+  
+  validation {
+    condition     = length(trimspace(var.ssh_public_key)) > 0
+    error_message = "SSH public key cannot be empty or null. Please ensure SSH_PUBLIC_KEY secret is set in GitHub repository settings."
+  }
+  
+  validation {
+    condition     = can(regex("^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521)\\s+[A-Za-z0-9+/]+[=]{0,3}(\\s+.*)?$", var.ssh_public_key))
+    error_message = "SSH public key must be in valid SSH public key format (e.g., 'ssh-rsa AAAAB3Nz...')."
+  }
 }
 
 variable "root_password" {
   description = "Root password for the Linode instance"
   type        = string
   sensitive   = true
+  
+  validation {
+    condition     = length(var.root_password) >= 8
+    error_message = "Root password must be at least 8 characters long."
+  }
+  
+  validation {
+    condition     = length(trimspace(var.root_password)) > 0
+    error_message = "Root password cannot be empty or null. Please ensure ROOT_PASSWORD secret is set in GitHub repository settings."
+  }
 }
 
 variable "tags" {
