@@ -26,6 +26,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.0.0
+          terraform_wrapper: true
 
       - name: Terraform Init
         run: terraform init
@@ -80,7 +81,11 @@ jobs:
           echo "Generating mobile client configuration..."
           VPN_IP="${{ steps.vpn_details.outputs.vpn_ip }}"
           
-          # SSH and generate client config
+          # Install sshpass if not available
+          sudo apt-get update -qq
+          sudo apt-get install -y sshpass
+          
+          # Add server to known hosts
           ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts || true
           
           # Create temporary script to generate client config
@@ -108,7 +113,8 @@ jobs:
           chmod +x /tmp/generate_vpn.sh
           
           # Try to generate config (may fail if server not fully ready)
-          timeout 300 bash -c "while ! sshpass -p '${{ secrets.ROOT_PASSWORD }}' ssh -o StrictHostKeyChecking=no root@$VPN_IP 'bash -s' < /tmp/generate_vpn.sh; do echo 'Retrying...'; sleep 10; done" || echo "Client config generation will be available shortly"
+          echo "Attempting to generate VPN client configuration..."
+          timeout 300 bash -c "while ! sshpass -p '${{ secrets.ROOT_PASSWORD }}' ssh -o StrictHostKeyChecking=no root@$VPN_IP 'bash -s' < /tmp/generate_vpn.sh; do echo 'Retrying...'; sleep 10; done" || echo "Client config generation will be available shortly after deployment completes"
 
       - name: Send Email with VPN Details
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

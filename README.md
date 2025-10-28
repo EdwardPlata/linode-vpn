@@ -15,7 +15,9 @@ This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Li
 
 ## 🚀 Quick Start
 
-**New to this project?** Check out the [Quick Start Guide](QUICKSTART.md) for step-by-step deployment instructions.
+**New to this project?** Choose your deployment method:
+- **[GitHub Actions Setup Guide](GITHUB_ACTIONS_SETUP.md)** - Automated deployment (Recommended)
+- **[Quick Start Guide](QUICKSTART.md)** - Local deployment
 
 ## 🔒 Security Notice
 
