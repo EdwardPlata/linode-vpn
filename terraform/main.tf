@@ -11,7 +11,7 @@ terraform {
 provider "linode" {
   token = var.linode_api_token
   # Token can be provided via:
-  # - GitHub Actions: LINODE_TOKEN_2025 secret
+  # - GitHub Actions: LINODE_PAT secret
   # - Codespaces: LINODE_PAT secret
   # - Local: terraform.tfvars file or TF_VAR_linode_api_token env var
 }

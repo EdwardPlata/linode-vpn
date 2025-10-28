@@ -85,7 +85,7 @@ GitHub Codespaces provides a fully configured development environment in the clo
 
 ### For GitHub Actions:
 Set these as GitHub repository secrets:
-- `LINODE_TOKEN_2025`: Your Linode API token (updated for 2025)
+- `LINODE_PAT`: Your Linode API token (Personal Access Token)
 - `SSH_PUBLIC_KEY`: Your SSH public key
 - `ROOT_PASSWORD`: Server root password
 - `MAIL_USERNAME`: Gmail address for sending VPN details (e.g., youremail@gmail.com)
@@ -228,6 +228,11 @@ docker restart openvpn-server
 ```
 
 ## Troubleshooting
+
+### SSH Key Issues in GitHub Actions
+If you see errors like "SSH public key cannot be empty" or "SSH public key must be in valid format":
+- See the detailed [SSH Key Troubleshooting Guide](docs/SSH_KEY_TROUBLESHOOTING.md)
+- Use the validation script: `./scripts/validate-ssh-key.sh`
 
 ### Container Won't Start
 ```bash

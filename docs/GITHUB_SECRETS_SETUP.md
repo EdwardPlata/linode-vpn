@@ -6,8 +6,8 @@ This guide will help you set up the required GitHub secrets for your Linode VPN 
 
 Your GitHub Actions workflow requires the following secrets to be set in your repository:
 
-### 1. LINODE_TOKEN_2025
-- **Description**: Your Linode API token
+### 1. LINODE_PAT
+- **Description**: Your Linode API token (Personal Access Token)
 - **How to get it**:
   1. Log in to [Linode Cloud Manager](https://cloud.linode.com/)
   2. Go to your profile (click your avatar) → API Tokens
@@ -75,7 +75,7 @@ After setting all secrets, you can test by:
 - Make sure there are no extra spaces or newlines
 
 ### "Linode API token cannot be empty" error
-- Verify the `LINODE_TOKEN_2025` secret is set with your valid API token
+- Verify the `LINODE_PAT` secret is set with your valid API token
 - Make sure the token has the correct permissions
 
 ### "Root password must be at least 8 characters" error

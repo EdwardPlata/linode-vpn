@@ -10,7 +10,7 @@ Navigate to: **Settings** → **Secrets and variables** → **Actions**
 
 Verify all 6 required secrets are configured:
 
-- [ ] `LINODE_TOKEN_2025` - Your Linode API token (from https://cloud.linode.com/profile/tokens)
+- [ ] `LINODE_PAT` - Your Linode API token (from https://cloud.linode.com/profile/tokens)
 - [ ] `SSH_PUBLIC_KEY` - Your SSH public key (from `~/.ssh/id_rsa.pub`)
 - [ ] `ROOT_PASSWORD` - Strong password for server root access (generate 20+ characters)
 - [ ] `MAIL_USERNAME` - Gmail address for sending notifications (e.g., `youremail@gmail.com`)

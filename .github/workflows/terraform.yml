@@ -1,10 +1,11 @@
+---
 name: "Terraform Deploy"
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -28,10 +29,47 @@ jobs:
           terraform_version: 1.0.0
           terraform_wrapper: true
 
+      - name: Validate SSH Public Key
+        run: |
+          echo "Checking SSH public key format..."
+          if [ -z "${{ secrets.SSH_PUBLIC_KEY }}" ]; then
+            echo "❌ ERROR: SSH_PUBLIC_KEY secret is not set or is empty"
+            echo "Please set the SSH_PUBLIC_KEY secret in repository settings"
+            exit 1
+          fi
+
+          # Check if SSH key starts with valid key type
+          if echo "${{ secrets.SSH_PUBLIC_KEY }}" | grep -E "^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521)" > /dev/null; then
+            echo "✅ SSH public key format appears valid"
+            echo "Key type: $(echo "${{ secrets.SSH_PUBLIC_KEY }}" | cut -d' ' -f1)"
+          else
+            echo "❌ ERROR: SSH_PUBLIC_KEY does not start with a valid key type"
+            echo "Expected format: ssh-rsa AAAAB3Nz... or ssh-ed25519 AAAAC3Nz..."
+            echo "Current value starts with: $(echo "${{ secrets.SSH_PUBLIC_KEY }}" | cut -c1-20)..."
+            exit 1
+          fi
+
+      - name: Validate Required Secrets
+        run: |
+          echo "Checking required secrets..."
+          if [ -z "${{ secrets.LINODE_PAT }}" ]; then
+            echo "❌ ERROR: LINODE_PAT secret is not set or is empty"
+            exit 1
+          else
+            echo "✅ LINODE_PAT is set"
+          fi
+
+          if [ -z "${{ secrets.ROOT_PASSWORD }}" ]; then
+            echo "❌ ERROR: ROOT_PASSWORD secret is not set or is empty"
+            exit 1
+          else
+            echo "✅ ROOT_PASSWORD is set"
+          fi
+
       - name: Terraform Init
         run: terraform init
         env:
-          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN_2025 }}
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
 
       - name: Terraform Format
         run: terraform fmt -check
@@ -41,8 +79,8 @@ jobs:
         if: github.event_name == 'pull_request'
         run: terraform plan
         env:
-          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN_2025 }}
-          TF_VAR_linode_api_token: ${{ secrets.LINODE_TOKEN_2025 }}
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+          TF_VAR_linode_api_token: ${{ secrets.LINODE_PAT }}
           TF_VAR_root_password: ${{ secrets.ROOT_PASSWORD }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         continue-on-error: true
@@ -51,8 +89,8 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve
         env:
-          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN_2025 }}
-          TF_VAR_linode_api_token: ${{ secrets.LINODE_TOKEN_2025 }}
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+          TF_VAR_linode_api_token: ${{ secrets.LINODE_PAT }}
           TF_VAR_root_password: ${{ secrets.ROOT_PASSWORD }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
           TF_VAR_region: "us-east"
@@ -67,7 +105,7 @@ jobs:
           echo "vpn_ip=$VPN_IP" >> $GITHUB_OUTPUT
           echo "VPN Server IP: $VPN_IP"
         env:
-          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN_2025 }}
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
 
       - name: Wait for VPN Server Initialization
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -80,14 +118,14 @@ jobs:
         run: |
           echo "Generating mobile client configuration..."
           VPN_IP="${{ steps.vpn_details.outputs.vpn_ip }}"
-          
+
           # Install sshpass if not available
           sudo apt-get update -qq
           sudo apt-get install -y sshpass
-          
+
           # Add server to known hosts
           ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts || true
-          
+
           # Create temporary script to generate client config
           cat > /tmp/generate_vpn.sh << 'EOF'
           #!/bin/bash
@@ -100,21 +138,94 @@ jobs:
             echo "Waiting for OpenVPN container... ($i/30)"
             sleep 10
           done
-          
+
           # Generate client configuration
           docker exec openvpn-server /usr/local/bin/generate-client.sh mobile-device || true
-          
+
           # Display the config file
           if [ -f /tmp/openvpn-clients/mobile-device.ovpn ]; then
             cat /tmp/openvpn-clients/mobile-device.ovpn
           fi
           EOF
-          
+
           chmod +x /tmp/generate_vpn.sh
-          
-          # Try to generate config (may fail if server not fully ready)
+
+                    # Try to generate config (may fail if server not fully ready)
           echo "Attempting to generate VPN client configuration..."
-          timeout 300 bash -c "while ! sshpass -p '${{ secrets.ROOT_PASSWORD }}' ssh -o StrictHostKeyChecking=no root@$VPN_IP 'bash -s' < /tmp/generate_vpn.sh; do echo 'Retrying...'; sleep 10; done" || echo "Client config generation will be available shortly after deployment completes"
+          root_pwd="${{ secrets.ROOT_PASSWORD }}"
+          timeout_cmd="timeout 300 bash -c"
+          retry_cmd="while ! sshpass -p '$root_pwd' ssh -o StrictHostKeyChecking=no"
+          ssh_cmd="root@$VPN_IP 'bash -s' < /tmp/generate_vpn.sh"
+          end_cmd="do echo 'Retrying...'; sleep 10; done"
+          fallback="|| echo 'Client config generation will be available shortly'"
+
+          eval "$timeout_cmd \"$retry_cmd $ssh_cmd; $end_cmd\" $fallback"
+
+      - name: Capture OpenVPN Configuration Details
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: vpn_config
+        run: |
+          echo "Capturing comprehensive OpenVPN configuration..."
+          VPN_IP="${{ steps.vpn_details.outputs.vpn_ip }}"
+          
+          # Capture server configuration details
+          echo "vpn_server_ip=$VPN_IP" >> $GITHUB_OUTPUT
+          echo "vpn_port=1194" >> $GITHUB_OUTPUT
+          echo "vpn_protocol=udp" >> $GITHUB_OUTPUT
+          echo "encryption=AES-256-GCM" >> $GITHUB_OUTPUT
+          echo "auth_algorithm=SHA256" >> $GITHUB_OUTPUT
+          echo "key_size=2048" >> $GITHUB_OUTPUT
+          echo "deployment_time=$(date -u)" >> $GITHUB_OUTPUT
+          echo "server_region=us-east" >> $GITHUB_OUTPUT
+          echo "instance_type=g6-nanode-1" >> $GITHUB_OUTPUT
+          
+          # Generate sample client configuration content for email
+          cat > /tmp/sample_client_config.txt << EOF
+          # Sample OpenVPN Client Configuration
+          # Replace 'my-device' with your device name
+          
+          client
+          dev tun
+          proto udp
+          remote $VPN_IP 1194
+          resolv-retry infinite
+          nobind
+          persist-key
+          persist-tun
+          ca ca.crt
+          cert my-device.crt
+          key my-device.key
+          remote-cert-tls server
+          cipher AES-256-GCM
+          auth SHA256
+          key-direction 1
+          script-security 2
+          dhcp-option DNS 10.8.0.1
+          # Pi-hole DNS for ad-blocking
+          EOF
+          
+          # Try to get actual OpenVPN server configuration
+          timeout 60 bash -c "
+          sshpass -p '${{ secrets.ROOT_PASSWORD }}' ssh -o StrictHostKeyChecking=no root@$VPN_IP '
+            if docker ps | grep -q openvpn-server; then
+              echo \"=== OpenVPN Server Status ===\" > /tmp/server_status.txt
+              docker ps | grep openvpn >> /tmp/server_status.txt
+              echo \"\" >> /tmp/server_status.txt
+              
+              echo \"=== OpenVPN Server Configuration ===\" >> /tmp/server_status.txt
+              docker exec openvpn-server cat /etc/openvpn/server.conf | head -20 >> /tmp/server_status.txt 2>/dev/null || echo \"Config not accessible yet\" >> /tmp/server_status.txt
+              echo \"\" >> /tmp/server_status.txt
+              
+              echo \"=== Certificate Authority Info ===\" >> /tmp/server_status.txt
+              docker exec openvpn-server ls -la /etc/openvpn/pki/ >> /tmp/server_status.txt 2>/dev/null || echo \"PKI not ready yet\" >> /tmp/server_status.txt
+              
+              cat /tmp/server_status.txt
+            else
+              echo \"OpenVPN container not running yet\"
+            fi
+          '" || echo "Server configuration will be available shortly"
+
+      - name: Send Email with VPN Details
 
       - name: Send Email with VPN Details
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -125,96 +236,207 @@ jobs:
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "🔐 Your Linode VPN is Ready for Mobile Connection"
+          subject: "🔐 Your Linode VPN Server is Ready - Complete Configuration Guide"
           to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
           body: |
-            Your Linode VPN server has been successfully deployed!
-            
-            📱 MOBILE DEVICE CONNECTION DETAILS
-            =====================================
-            
-            Server IP: ${{ steps.vpn_details.outputs.vpn_ip }}
+            🎉 SUCCESS! Your Linode OpenVPN Server is Deployed and Ready!
+            ================================================================
+
+            Your VPN server has been successfully deployed and configured with Pi-hole ad-blocking.
+            Deployment completed at: ${{ steps.vpn_config.outputs.deployment_time }}
+
+            🌐 SERVER DETAILS
+            =================
+            Server IP: ${{ steps.vpn_config.outputs.vpn_server_ip }}
             Region: Newark, NJ (us-east)
-            Instance Type: Nanode 1GB (g6-nanode-1)
-            VPN Port: 1194
-            Protocol: UDP
-            
-            🍎 iOS/iPadOS SETUP INSTRUCTIONS
-            =====================================
-            
-            1. Download OpenVPN Connect:
-               - Open the App Store
-               - Search for "OpenVPN Connect"
-               - Install the official OpenVPN Connect app
-            
-            2. Get Your Configuration File:
-               - SSH to server: ssh root@${{ steps.vpn_details.outputs.vpn_ip }}
-               - Generate config: docker exec openvpn-server /usr/local/bin/generate-client.sh my-iphone
-               - View config: cat /tmp/openvpn-clients/my-iphone.ovpn
-               
-            3. Import to Your iPhone/iPad:
-               - Copy the entire .ovpn file content
-               - Email it to yourself or use AirDrop
-               - Tap the file on your device
-               - Choose "Open in OpenVPN"
-               - Import and connect!
-            
-            🤖 ANDROID SETUP INSTRUCTIONS
-            =====================================
-            
-            1. Download OpenVPN Connect from Google Play Store
-            2. Follow the same steps above to get your .ovpn file
-            3. Import to OpenVPN Connect app
-            
-            🖥️ SERVER MANAGEMENT
-            =====================================
-            
-            SSH Access: ssh root@${{ steps.vpn_details.outputs.vpn_ip }}
-            
-            Generate Additional Clients:
-            docker exec openvpn-server /usr/local/bin/generate-client.sh client-name
-            
-            View Logs:
-            docker logs openvpn-server
-            
-            Check Status:
-            docker ps
-            
-            🛡️ PI-HOLE AD-BLOCKING DASHBOARD
-            =====================================
-            
-            URL: http://${{ steps.vpn_details.outputs.vpn_ip }}/admin
-            
-            Access the Pi-hole dashboard to:
-            - Monitor blocked queries
-            - Manage blocklists
-            - Whitelist/blacklist domains
-            
-            ⚠️ IMPORTANT SECURITY NOTES
-            =====================================
-            
-            - Your root password: (Set in GitHub Secrets)
-            - Keep your .ovpn files secure
-            - Never share your VPN configuration files
-            - Consider changing the default SSH port (22) for added security
-            
-            💰 COST INFORMATION
-            =====================================
-            
+            Instance Type: ${{ steps.vpn_config.outputs.instance_type }}
             Monthly Cost: ~$5 USD
             Bandwidth: 1TB included
+
+            🔒 OPENVPN CONFIGURATION
+            ========================
+            VPN Server IP: ${{ steps.vpn_config.outputs.vpn_server_ip }}
+            Port: ${{ steps.vpn_config.outputs.vpn_port }}
+            Protocol: ${{ steps.vpn_config.outputs.vpn_protocol }}
+            Encryption: ${{ steps.vpn_config.outputs.encryption }}
+            Authentication: ${{ steps.vpn_config.outputs.auth_algorithm }}
+            Key Size: ${{ steps.vpn_config.outputs.key_size }} bits
+            DNS Server: 10.8.0.1 (Pi-hole for ad-blocking)
+            VPN Subnet: 10.8.0.0/24
+
+            📱 QUICK SETUP FOR MOBILE DEVICES
+            ==================================
+
+            🍎 iOS/iPadOS Setup:
+            1. Download "OpenVPN Connect" from App Store
+            2. SSH to server: ssh root@${{ steps.vpn_config.outputs.vpn_server_ip }}
+            3. Generate config: docker exec openvpn-server /usr/local/bin/generate-client.sh my-iphone
+            4. View config: cat /tmp/openvpn-clients/my-iphone.ovpn
+            5. Copy entire .ovpn content and email to yourself
+            6. Open .ovpn file on device → Import to OpenVPN Connect
+
+            🤖 Android Setup:
+            1. Download "OpenVPN Connect" from Google Play
+            2. Follow same steps as iOS above
+            3. Import .ovpn file to OpenVPN Connect app
+
+            💻 DESKTOP SETUP (Windows/Mac/Linux)
+            ====================================
+
+            Windows:
+            1. Download OpenVPN GUI from openvpn.net
+            2. Generate client config on server (see SSH commands below)
+            3. Copy .ovpn file to OpenVPN config folder
+            4. Right-click OpenVPN system tray → Connect
+
+            Mac:
+            1. Download Tunnelblick (free) or OpenVPN Connect
+            2. Import .ovpn configuration file
+            3. Connect through application
+
+            Linux:
+            1. Install: sudo apt install openvpn
+            2. Copy .ovpn file to local machine
+            3. Connect: sudo openvpn my-device.ovpn
+
+            🔧 CLIENT CONFIGURATION MANAGEMENT
+            ==================================
+
+            SSH to your server:
+            ssh root@${{ steps.vpn_config.outputs.vpn_server_ip }}
+
+            Generate new client configurations:
+            # For iPhone
+            docker exec openvpn-server /usr/local/bin/generate-client.sh my-iphone
+
+            # For Android
+            docker exec openvpn-server /usr/local/bin/generate-client.sh my-android
+
+            # For laptop
+            docker exec openvpn-server /usr/local/bin/generate-client.sh my-laptop
+
+            View generated configurations:
+            ls -la /tmp/openvpn-clients/
+            cat /tmp/openvpn-clients/[device-name].ovpn
+
+            Revoke a client certificate:
+            docker exec openvpn-server /usr/local/bin/revoke-client.sh device-name
+
+            📋 SAMPLE CLIENT CONFIGURATION
+            ==============================
+            Here's what your .ovpn file will look like:
+
+            client
+            dev tun
+            proto udp
+            remote ${{ steps.vpn_config.outputs.vpn_server_ip }} ${{ steps.vpn_config.outputs.vpn_port }}
+            resolv-retry infinite
+            nobind
+            persist-key
+            persist-tun
+            ca ca.crt
+            cert [your-device].crt
+            key [your-device].key
+            remote-cert-tls server
+            cipher ${{ steps.vpn_config.outputs.encryption }}
+            auth ${{ steps.vpn_config.outputs.auth_algorithm }}
+            key-direction 1
+            script-security 2
+            dhcp-option DNS 10.8.0.1
+            # Pi-hole DNS provides ad-blocking
+
+            🛡️ PI-HOLE AD-BLOCKING DASHBOARD
+            =================================
+            URL: http://${{ steps.vpn_config.outputs.vpn_server_ip }}/admin
+
+            Features:
+            - Real-time query monitoring
+            - Block/allow specific domains
+            - View blocked ads statistics
+            - Manage DNS blocklists
+            - Network-wide ad blocking for all VPN clients
+
+            🔧 SERVER MANAGEMENT COMMANDS
+            =============================
+
+            Check VPN server status:
+            docker ps
+            docker logs openvpn-server
+
+            Restart VPN server:
+            docker restart openvpn-server
+
+            View active VPN connections:
+            docker exec openvpn-server cat /etc/openvpn/openvpn-status.log
+
+            Check Pi-hole status:
+            docker ps | grep pihole
+            docker logs pihole
+
+            Update system:
+            apt update && apt upgrade -y
+
+            🔒 SECURITY RECOMMENDATIONS
+            ===========================
+            ✅ Change default SSH port (22) to custom port
+            ✅ Set up fail2ban for SSH protection
+            ✅ Regularly update server packages
+            ✅ Monitor Pi-hole logs for unusual activity
+            ✅ Keep .ovpn files secure and never share them
+            ✅ Revoke certificates for lost/stolen devices
+
+            🚨 FIREWALL CONFIGURATION
+            =========================
+            Active firewall rules:
+            - SSH: Port 22/tcp (consider changing)
+            - OpenVPN: Port 1194/udp
+            - Pi-hole Web: Port 80/tcp
+            - All other ports: Blocked
+
+            🌐 CONNECTION TESTING
+            =====================
+            After connecting to VPN:
+            1. Check your IP: Visit whatismyipaddress.com
+            2. DNS leak test: Visit dnsleaktest.com
+            3. Pi-hole test: Visit doubleclick.net (should be blocked)
+
+            📞 TROUBLESHOOTING
+            ==================
             
-            📚 DOCUMENTATION
-            =====================================
+            Connection Issues:
+            - Verify server IP and port in .ovpn file
+            - Check if OpenVPN server is running: docker ps
+            - Review server logs: docker logs openvpn-server
             
-            Full documentation: https://github.com/EdwardPlata/linode-vpn
-            
-            If you need help, check the troubleshooting section in the README.
-            
-            Happy secure browsing! 🚀
-            
+            DNS/Ad-blocking Issues:
+            - Verify Pi-hole is running: docker ps | grep pihole
+            - Check Pi-hole logs: docker logs pihole
+            - Ensure DNS is set to 10.8.0.1 in client config
+
+            Certificate Issues:
+            - Regenerate client certificate if corrupted
+            - Check certificate expiration dates
+            - Verify CA certificate is valid
+
+            📚 ADDITIONAL RESOURCES
+            =======================
+            - Full documentation: https://github.com/EdwardPlata/linode-vpn
+            - OpenVPN documentation: https://openvpn.net/community-resources/
+            - Pi-hole documentation: https://docs.pi-hole.net/
+
+            🎯 QUICK START CHECKLIST
+            ========================
+            □ Connect to server via SSH
+            □ Generate client configuration for your device
+            □ Download .ovpn file to your device
+            □ Install OpenVPN Connect app
+            □ Import .ovpn configuration
+            □ Connect and test your VPN
+            □ Access Pi-hole dashboard
+            □ Test ad-blocking functionality
+
             ---
-            This email was automatically generated by GitHub Actions.
-            Deployment time: $(date -u)
+            Server deployed via GitHub Actions on ${{ steps.vpn_config.outputs.deployment_time }}
+            Enjoy your private, ad-free internet! 🚀
 

@@ -1,5 +1,5 @@
 # For local deployment only - with GitHub Actions, these values come from GitHub secrets
-linode_api_token = "your_linode_api_token_here"  # For GitHub Actions: use LINODE_TOKEN secret
+linode_api_token = "your_linode_api_token_here"  # For GitHub Actions: use LINODE_PAT secret
 ssh_public_key   = "ssh-rsa AAAAB3Nz... your_public_key_here"  # For GitHub Actions: use SSH_PUBLIC_KEY secret
 root_password    = "strong_password_here"  # For GitHub Actions: use ROOT_PASSWORD secret
 
