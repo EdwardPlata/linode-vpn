@@ -18,8 +18,9 @@ This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Li
 ## 🚀 Quick Start
 
 **New to this project?** Choose your deployment method:
-- **[GitHub Actions Setup Guide](GITHUB_ACTIONS_SETUP.md)** - Automated deployment (Recommended)
-- **[GitHub Codespaces Setup Guide](CODESPACES_SETUP.md)** - Deploy from browser (No local setup required!) ☁️
+- **[GitHub Secrets Setup Guide](docs/GITHUB_SECRETS_SETUP.md)** - Configure repository secrets (REQUIRED for CI/CD)
+- **[GitHub Codespaces Setup Guide](docs/CODESPACES_SETUP.md)** - Deploy from browser (No local setup required!) ☁️
+- **[OpenVPN Client Setup](docs/OpenVPN-Setup.md)** - Connect your devices to the VPN
 - **[Quick Start Guide](QUICKSTART.md)** - Local deployment
 
 ## 🔒 Security Notice
@@ -91,7 +92,7 @@ Set these as GitHub repository secrets:
 - `MAIL_PASSWORD`: Gmail app password (not regular password - generate at https://myaccount.google.com/apppasswords)
 - `MAIL_TO`: Email address to receive VPN connection details
 
-**� Need help setting up secrets?** See the detailed [GitHub Secrets Setup Guide](GITHUB_SECRETS_SETUP.md) for step-by-step instructions.
+**📋 Need help setting up secrets?** See the detailed [GitHub Secrets Setup Guide](docs/GITHUB_SECRETS_SETUP.md) for step-by-step instructions.
 
 **�📧 Email Configuration Note:**
 For Gmail users, you need to generate an App Password (not your regular Gmail password):
