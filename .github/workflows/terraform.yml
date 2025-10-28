@@ -226,8 +226,6 @@ jobs:
           '" || echo "Server configuration will be available shortly"
 
       - name: Send Email with VPN Details
-
-      - name: Send Email with VPN Details
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: dawidd6/action-send-mail@v3
         with:
