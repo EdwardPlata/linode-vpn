@@ -19,13 +19,13 @@ variable "instance_image" {
 variable "region" {
   description = "Region for the Linode instance"
   type        = string
-  default     = "us-east"  # Change to your preferred region
+  default     = "us-east" # Change to your preferred region
 }
 
 variable "instance_type" {
   description = "Type/size of the Linode instance"
   type        = string
-  default     = "g6-nanode-1"  # 1GB RAM, 1 CPU
+  default     = "g6-nanode-1" # 1GB RAM, 1 CPU
 }
 
 variable "ssh_public_key" {
