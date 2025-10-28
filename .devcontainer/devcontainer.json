@@ -1,0 +1,68 @@
+{
+  "name": "Linode VPN Development",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/terraform:1": {
+      "version": "1.5.7"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    }
+  },
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "hashicorp.terraform",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "ms-vscode.makefile-tools"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terraform.languageServer.enable": true,
+        "files.watcherExclude": {
+          "**/terraform/.terraform/**": true,
+          "**/terraform/.terraform.lock.hcl": false
+        }
+      }
+    }
+  },
+  
+  "remoteUser": "vscode",
+  "containerUser": "vscode",
+  
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  
+  "forwardPorts": [
+    1194,
+    80
+  ],
+  
+  "portsAttributes": {
+    "1194": {
+      "label": "OpenVPN",
+      "protocol": "udp"
+    },
+    "80": {
+      "label": "Pi-hole Web Interface",
+      "onAutoForward": "notify"
+    }
+  },
+  
+  "mounts": [
+    "source=${localWorkspaceFolder}/.env.local,target=/workspaces/${localWorkspaceFolderBasename}/.env.local,type=bind,consistency=cached"
+  ],
+  
+  "remoteEnv": {
+    "TERRAFORM_VERSION": "1.5.7"
+  }
+}
