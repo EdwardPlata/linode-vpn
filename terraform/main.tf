@@ -35,24 +35,24 @@ resource "linode_instance" "vpn_server" {
       "mkdir -p /opt/openvpn",
     ]
     connection {
-      type        = "ssh"
-      user        = "root"
-      password    = var.root_password
-      host        = self.ip_address
-      timeout     = "5m"
+      type     = "ssh"
+      user     = "root"
+      password = var.root_password
+      host     = self.ip_address
+      timeout  = "5m"
     }
   }
 
   # Copy Docker OpenVPN files
   provisioner "file" {
-    source      = "../docker/"
+    source      = "${path.module}/../docker/"
     destination = "/opt/openvpn/"
     connection {
-      type        = "ssh"
-      user        = "root"
-      password    = var.root_password
-      host        = self.ip_address
-      timeout     = "5m"
+      type     = "ssh"
+      user     = "root"
+      password = var.root_password
+      host     = self.ip_address
+      timeout  = "5m"
     }
   }
 
@@ -67,11 +67,11 @@ resource "linode_instance" "vpn_server" {
       "./deploy-docker.sh",
     ]
     connection {
-      type        = "ssh"
-      user        = "root"
-      password    = var.root_password
-      host        = self.ip_address
-      timeout     = "15m"
+      type     = "ssh"
+      user     = "root"
+      password = var.root_password
+      host     = self.ip_address
+      timeout  = "15m"
     }
   }
 
@@ -85,11 +85,11 @@ resource "linode_instance" "vpn_server" {
       "ufw --force enable",
     ]
     connection {
-      type        = "ssh"
-      user        = "root"
-      password    = var.root_password
-      host        = self.ip_address
-      timeout     = "5m"
+      type     = "ssh"
+      user     = "root"
+      password = var.root_password
+      host     = self.ip_address
+      timeout  = "5m"
     }
   }
 }
@@ -105,12 +105,12 @@ output "vpn_server_status" {
 
 output "connection_info" {
   value = {
-    ssh_command = "ssh root@${linode_instance.vpn_server.ip_address}"
-    openvpn_port = "1194"
-    protocol = "UDP"
-    pihole_url = "http://${linode_instance.vpn_server.ip_address}/admin"
-    pihole_note = "Pi-hole provides DNS-based ad-blocking for all VPN clients"
+    ssh_command       = "ssh root@${linode_instance.vpn_server.ip_address}"
+    openvpn_port      = "1194"
+    protocol          = "UDP"
+    pihole_url        = "http://${linode_instance.vpn_server.ip_address}/admin"
+    pihole_note       = "Pi-hole provides DNS-based ad-blocking for all VPN clients"
     client_generation = "Run: docker exec openvpn-server /usr/local/bin/generate-client.sh <client-name>"
-    ios_setup = "Download OpenVPN Connect app from App Store"
+    ios_setup         = "Download OpenVPN Connect app from App Store"
   }
 }
