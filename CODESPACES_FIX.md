@@ -65,7 +65,7 @@ This ensures:
 ### Option 1: Test in GitHub Codespaces (Recommended)
 
 1. Go to the repository on GitHub
-2. Click **Code** → **Codespaces** → **Create codespace on copilot/fix-codespace-permission-error**
+2. Click **Code** → **Codespaces** → **Create codespace on main** (or your current branch)
 3. Wait for the container to build (first time may take 2-3 minutes)
 4. Wait for the post-create script to complete
 5. Verify:

@@ -20,7 +20,7 @@ This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Li
 **New to this project?** Choose your deployment method:
 - **[GitHub Actions Setup Guide](GITHUB_ACTIONS_SETUP.md)** - Automated deployment (Recommended)
 - **[Quick Start Guide](QUICKSTART.md)** - Local deployment
-- **[GitHub Codespaces](https://github.com/codespaces/new?hide_repo_select=true&ref=main)** - Develop in the cloud (No local setup required!) ☁️
+- **[GitHub Codespaces](https://github.com/EdwardPlata/linode-vpn)** - Click "Code" → "Codespaces" → "Create codespace" (No local setup required!) ☁️
 
 ## 🔒 Security Notice
 
