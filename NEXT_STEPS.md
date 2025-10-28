@@ -53,8 +53,8 @@ Add these 6 secrets:
 
 **Option B: Push to Main**
 ```bash
-git checkout main
-git merge copilot/modify-linode-vpn-workflow
+# Make a change or create an empty commit
+git commit --allow-empty -m "Deploy VPN"
 git push origin main
 ```
 
