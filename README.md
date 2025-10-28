@@ -20,6 +20,7 @@ This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Li
 **New to this project?** Choose your deployment method:
 - **[GitHub Actions Setup Guide](GITHUB_ACTIONS_SETUP.md)** - Automated deployment (Recommended)
 - **[Quick Start Guide](QUICKSTART.md)** - Local deployment
+- **[GitHub Codespaces](https://github.com/EdwardPlata/linode-vpn)** - Click "Code" → "Codespaces" → "Create codespace" (No local setup required!) ☁️
 
 ## 🔒 Security Notice
 
@@ -32,9 +33,30 @@ This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Li
 ## Prerequisites
 
 - A Linode account and API token
-- Terraform installed (v1.0.0 or later)
+- Terraform installed (v1.0.0 or later) - **OR** use GitHub Codespaces (pre-installed) ☁️
 - SSH key pair
 - OpenVPN Connect app on your Apple device (iOS/macOS)
+
+## 💻 Development with GitHub Codespaces (NEW!)
+
+**Easiest way to get started!** No local setup required.
+
+GitHub Codespaces provides a fully configured development environment in the cloud:
+- ✅ Terraform pre-installed
+- ✅ Docker ready to use
+- ✅ All dependencies configured
+- ✅ No permission issues
+- ✅ Works from any device with a browser
+
+**To start:**
+1. Click the "Code" button above
+2. Select "Codespaces" tab
+3. Click "Create codespace on main"
+4. Wait 2-3 minutes for setup
+5. Run `./setup-env.sh` to configure credentials
+6. Deploy with `./deploy.sh`
+
+> 📖 See [CODESPACES_FIX.md](CODESPACES_FIX.md) for detailed information about the Codespaces configuration.
 
 ## 🔧 Environment Setup (IMPORTANT)
 
