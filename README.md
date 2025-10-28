@@ -2,6 +2,8 @@
 
 This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Linode using Terraform and Docker. Enjoy a private VPN with network-wide ad blocking, tracker blocking, and enhanced privacy for all your devices.
 
+> **🎉 Just updated?** See [NEXT_STEPS.md](NEXT_STEPS.md) for instructions on deploying with the new workflow!
+
 ## ✨ Features
 
 - 🔒 **Secure OpenVPN Server** - Industry-standard VPN with AES-256 encryption
