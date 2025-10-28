@@ -26,11 +26,12 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.0.0
+          terraform_wrapper: true
 
       - name: Terraform Init
         run: terraform init
         env:
-          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
+          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN_2025 }}
 
       - name: Terraform Format
         run: terraform fmt -check
@@ -40,8 +41,8 @@ jobs:
         if: github.event_name == 'pull_request'
         run: terraform plan
         env:
-          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
-          TF_VAR_linode_api_token: ${{ secrets.LINODE_TOKEN }}
+          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN_2025 }}
+          TF_VAR_linode_api_token: ${{ secrets.LINODE_TOKEN_2025 }}
           TF_VAR_root_password: ${{ secrets.ROOT_PASSWORD }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
         continue-on-error: true
@@ -50,7 +51,170 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve
         env:
-          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
-          TF_VAR_linode_api_token: ${{ secrets.LINODE_TOKEN }}
+          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN_2025 }}
+          TF_VAR_linode_api_token: ${{ secrets.LINODE_TOKEN_2025 }}
           TF_VAR_root_password: ${{ secrets.ROOT_PASSWORD }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_region: "us-east"
+          TF_VAR_instance_type: "g6-nanode-1"
+
+      - name: Capture VPN Details
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: vpn_details
+        run: |
+          echo "Capturing VPN server details..."
+          VPN_IP=$(terraform output -raw vpn_server_ip)
+          echo "vpn_ip=$VPN_IP" >> $GITHUB_OUTPUT
+          echo "VPN Server IP: $VPN_IP"
+        env:
+          LINODE_TOKEN: ${{ secrets.LINODE_TOKEN_2025 }}
+
+      - name: Wait for VPN Server Initialization
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "Waiting for VPN server to complete initialization..."
+          sleep 60
+
+      - name: Generate Client Configuration
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "Generating mobile client configuration..."
+          VPN_IP="${{ steps.vpn_details.outputs.vpn_ip }}"
+          
+          # Install sshpass if not available
+          sudo apt-get update -qq
+          sudo apt-get install -y sshpass
+          
+          # Add server to known hosts
+          ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts || true
+          
+          # Create temporary script to generate client config
+          cat > /tmp/generate_vpn.sh << 'EOF'
+          #!/bin/bash
+          # Wait for OpenVPN container to be ready
+          for i in {1..30}; do
+            if docker ps | grep -q openvpn-server; then
+              echo "OpenVPN container is running"
+              break
+            fi
+            echo "Waiting for OpenVPN container... ($i/30)"
+            sleep 10
+          done
+          
+          # Generate client configuration
+          docker exec openvpn-server /usr/local/bin/generate-client.sh mobile-device || true
+          
+          # Display the config file
+          if [ -f /tmp/openvpn-clients/mobile-device.ovpn ]; then
+            cat /tmp/openvpn-clients/mobile-device.ovpn
+          fi
+          EOF
+          
+          chmod +x /tmp/generate_vpn.sh
+          
+          # Try to generate config (may fail if server not fully ready)
+          echo "Attempting to generate VPN client configuration..."
+          timeout 300 bash -c "while ! sshpass -p '${{ secrets.ROOT_PASSWORD }}' ssh -o StrictHostKeyChecking=no root@$VPN_IP 'bash -s' < /tmp/generate_vpn.sh; do echo 'Retrying...'; sleep 10; done" || echo "Client config generation will be available shortly after deployment completes"
+
+      - name: Send Email with VPN Details
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "🔐 Your Linode VPN is Ready for Mobile Connection"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            Your Linode VPN server has been successfully deployed!
+            
+            📱 MOBILE DEVICE CONNECTION DETAILS
+            =====================================
+            
+            Server IP: ${{ steps.vpn_details.outputs.vpn_ip }}
+            Region: Newark, NJ (us-east)
+            Instance Type: Nanode 1GB (g6-nanode-1)
+            VPN Port: 1194
+            Protocol: UDP
+            
+            🍎 iOS/iPadOS SETUP INSTRUCTIONS
+            =====================================
+            
+            1. Download OpenVPN Connect:
+               - Open the App Store
+               - Search for "OpenVPN Connect"
+               - Install the official OpenVPN Connect app
+            
+            2. Get Your Configuration File:
+               - SSH to server: ssh root@${{ steps.vpn_details.outputs.vpn_ip }}
+               - Generate config: docker exec openvpn-server /usr/local/bin/generate-client.sh my-iphone
+               - View config: cat /tmp/openvpn-clients/my-iphone.ovpn
+               
+            3. Import to Your iPhone/iPad:
+               - Copy the entire .ovpn file content
+               - Email it to yourself or use AirDrop
+               - Tap the file on your device
+               - Choose "Open in OpenVPN"
+               - Import and connect!
+            
+            🤖 ANDROID SETUP INSTRUCTIONS
+            =====================================
+            
+            1. Download OpenVPN Connect from Google Play Store
+            2. Follow the same steps above to get your .ovpn file
+            3. Import to OpenVPN Connect app
+            
+            🖥️ SERVER MANAGEMENT
+            =====================================
+            
+            SSH Access: ssh root@${{ steps.vpn_details.outputs.vpn_ip }}
+            
+            Generate Additional Clients:
+            docker exec openvpn-server /usr/local/bin/generate-client.sh client-name
+            
+            View Logs:
+            docker logs openvpn-server
+            
+            Check Status:
+            docker ps
+            
+            🛡️ PI-HOLE AD-BLOCKING DASHBOARD
+            =====================================
+            
+            URL: http://${{ steps.vpn_details.outputs.vpn_ip }}/admin
+            
+            Access the Pi-hole dashboard to:
+            - Monitor blocked queries
+            - Manage blocklists
+            - Whitelist/blacklist domains
+            
+            ⚠️ IMPORTANT SECURITY NOTES
+            =====================================
+            
+            - Your root password: (Set in GitHub Secrets)
+            - Keep your .ovpn files secure
+            - Never share your VPN configuration files
+            - Consider changing the default SSH port (22) for added security
+            
+            💰 COST INFORMATION
+            =====================================
+            
+            Monthly Cost: ~$5 USD
+            Bandwidth: 1TB included
+            
+            📚 DOCUMENTATION
+            =====================================
+            
+            Full documentation: https://github.com/EdwardPlata/linode-vpn
+            
+            If you need help, check the troubleshooting section in the README.
+            
+            Happy secure browsing! 🚀
+            
+            ---
+            This email was automatically generated by GitHub Actions.
+            Deployment time: $(date -u)
+

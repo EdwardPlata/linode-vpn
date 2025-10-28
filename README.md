@@ -2,6 +2,8 @@
 
 This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Linode using Terraform and Docker. Enjoy a private VPN with network-wide ad blocking, tracker blocking, and enhanced privacy for all your devices.
 
+> **🎉 Just updated?** See [NEXT_STEPS.md](NEXT_STEPS.md) for instructions on deploying with the new workflow!
+
 ## ✨ Features
 
 - 🔒 **Secure OpenVPN Server** - Industry-standard VPN with AES-256 encryption
@@ -10,10 +12,14 @@ This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Li
 - 🌐 **All Devices Protected** - Blocks ads on phones, tablets, computers, smart TVs, and more
 - 📊 **Web Management Interface** - Pi-hole dashboard to monitor and configure blocking
 - 💰 **Cost-Effective** - Run your own VPN + ad-blocker for ~$5/month
+- 📧 **Automated Email Notifications** - Receive detailed VPN connection instructions via email after deployment
+- 🤖 **GitHub Actions Automation** - Fully automated deployment using Terraform
 
 ## 🚀 Quick Start
 
-**New to this project?** Check out the [Quick Start Guide](QUICKSTART.md) for step-by-step deployment instructions.
+**New to this project?** Choose your deployment method:
+- **[GitHub Actions Setup Guide](GITHUB_ACTIONS_SETUP.md)** - Automated deployment (Recommended)
+- **[Quick Start Guide](QUICKSTART.md)** - Local deployment
 
 ## 🔒 Security Notice
 
@@ -56,9 +62,42 @@ This project deploys an OpenVPN server with integrated Pi-hole ad-blocking on Li
 
 ### For GitHub Actions:
 Set these as GitHub repository secrets:
-- `LINODE_TOKEN`: Your Linode API token
+- `LINODE_TOKEN_2025`: Your Linode API token (updated for 2025)
 - `SSH_PUBLIC_KEY`: Your SSH public key
 - `ROOT_PASSWORD`: Server root password
+- `MAIL_USERNAME`: Gmail address for sending VPN details (e.g., youremail@gmail.com)
+- `MAIL_PASSWORD`: Gmail app password (not regular password - generate at https://myaccount.google.com/apppasswords)
+- `MAIL_TO`: Email address to receive VPN connection details
+
+**📧 Email Configuration Note:**
+For Gmail users, you need to generate an App Password (not your regular Gmail password):
+1. Go to https://myaccount.google.com/apppasswords
+2. Select "Mail" and "Other (Custom name)"
+3. Generate and copy the 16-character password
+4. Use this as your `MAIL_PASSWORD` secret
+
+## Deployment Options
+
+### Option 1: GitHub Actions (Recommended)
+
+The easiest way to deploy is using GitHub Actions, which will automatically:
+- Deploy your VPN server to Linode (Newark, NJ region)
+- Configure OpenVPN with Pi-hole ad-blocking
+- Send you an email with all connection details
+
+**Steps:**
+1. Fork this repository
+2. Configure the GitHub secrets listed above in your repository settings
+3. Push to the `main` branch or manually trigger the workflow
+4. Wait for the workflow to complete (~10-15 minutes)
+5. Check your email for VPN connection instructions!
+
+**Deployment Details:**
+- **Region:** Newark, NJ (us-east)
+- **Instance Type:** Nanode 1GB (g6-nanode-1) - ~$5/month
+- **Automation:** Full Terraform-based infrastructure as code
+
+### Option 2: Local Deployment
 
 ## Quick Deployment
 
