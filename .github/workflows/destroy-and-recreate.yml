@@ -1,0 +1,244 @@
+---
+name: "Destroy and Recreate VPN"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: 'Type "destroy" to confirm destroying existing infrastructure'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  destroy-existing:
+    name: "Destroy Existing Linode Instance"
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_destroy == 'destroy'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.0.0
+          terraform_wrapper: true
+
+      - name: Install Linode CLI
+        run: |
+          pip install linode-cli
+
+      - name: Delete Existing Linode Instances
+        env:
+          LINODE_CLI_TOKEN: ${{ secrets.LINODE_PAT }}
+        run: |
+          echo "🔍 Searching for existing VPN instances..."
+          
+          # List all linodes and find ones with our label
+          INSTANCES=$(linode-cli linodes list --label personal-vpn-server --json 2>/dev/null || echo "[]")
+          
+          if [ "$INSTANCES" == "[]" ] || [ -z "$INSTANCES" ]; then
+            echo "ℹ️ No existing personal-vpn-server instances found"
+          else
+            echo "Found instances:"
+            echo "$INSTANCES" | jq -r '.[] | "ID: \(.id), Label: \(.label), IP: \(.ipv4[0]), Status: \(.status)"'
+            
+            # Delete each instance
+            for ID in $(echo "$INSTANCES" | jq -r '.[].id'); do
+              echo "🗑️ Deleting instance ID: $ID"
+              linode-cli linodes delete $ID
+              echo "✅ Deleted instance $ID"
+            done
+          fi
+          
+          echo ""
+          echo "🧹 Cleanup complete. Ready for fresh deployment."
+
+  deploy-new:
+    name: "Deploy Fresh VPN Server"
+    runs-on: ubuntu-latest
+    needs: destroy-existing
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.0.0
+          terraform_wrapper: true
+
+      - name: Validate SSH Public Key
+        run: |
+          echo "Checking SSH public key format..."
+          if [ -z "${{ secrets.SSH_PUBLIC_KEY }}" ]; then
+            echo "❌ ERROR: SSH_PUBLIC_KEY secret is not set or is empty"
+            echo "Please set the SSH_PUBLIC_KEY secret in repository settings"
+            exit 1
+          fi
+
+          if echo "${{ secrets.SSH_PUBLIC_KEY }}" | grep -E "^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521)" > /dev/null; then
+            echo "✅ SSH public key format appears valid"
+            echo "Key type: $(echo "${{ secrets.SSH_PUBLIC_KEY }}" | cut -d' ' -f1)"
+          else
+            echo "❌ ERROR: SSH_PUBLIC_KEY does not start with a valid key type"
+            exit 1
+          fi
+
+      - name: Validate Required Secrets
+        run: |
+          echo "Checking required secrets..."
+          if [ -z "${{ secrets.LINODE_PAT }}" ]; then
+            echo "❌ ERROR: LINODE_PAT secret is not set"
+            exit 1
+          else
+            echo "✅ LINODE_PAT is set"
+          fi
+
+          if [ -z "${{ secrets.ROOT_PASSWORD }}" ]; then
+            echo "❌ ERROR: ROOT_PASSWORD secret is not set"
+            exit 1
+          else
+            echo "✅ ROOT_PASSWORD is set"
+          fi
+
+      - name: Terraform Init
+        run: terraform init
+        env:
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        env:
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+          TF_VAR_linode_api_token: ${{ secrets.LINODE_PAT }}
+          TF_VAR_root_password: ${{ secrets.ROOT_PASSWORD }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_region: "us-east"
+          TF_VAR_instance_type: "g6-nanode-1"
+
+      - name: Capture VPN Details
+        id: vpn_details
+        run: |
+          echo "Capturing VPN server details..."
+          VPN_IP=$(terraform output -raw vpn_server_ip)
+          echo "vpn_ip=$VPN_IP" >> $GITHUB_OUTPUT
+          echo "VPN Server IP: $VPN_IP"
+        env:
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+
+      - name: Wait for VPN Server Initialization
+        run: |
+          echo "Waiting for VPN server to complete initialization..."
+          sleep 90
+
+      - name: Generate Client Configuration
+        run: |
+          echo "Generating mobile client configuration..."
+          VPN_IP="${{ steps.vpn_details.outputs.vpn_ip }}"
+
+          sudo apt-get update -qq
+          sudo apt-get install -y sshpass
+
+          ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts || true
+
+          cat > /tmp/generate_vpn.sh << 'EOF'
+          #!/bin/bash
+          for i in {1..30}; do
+            if docker ps | grep -q openvpn-server; then
+              echo "OpenVPN container is running"
+              break
+            fi
+            echo "Waiting for OpenVPN container... ($i/30)"
+            sleep 10
+          done
+
+          docker exec openvpn-server /usr/local/bin/generate-client.sh mobile-device || true
+
+          if [ -f /tmp/openvpn-clients/mobile-device.ovpn ]; then
+            cat /tmp/openvpn-clients/mobile-device.ovpn
+          fi
+          EOF
+
+          chmod +x /tmp/generate_vpn.sh
+
+          echo "Attempting to generate VPN client configuration..."
+          timeout 300 sshpass -p '${{ secrets.ROOT_PASSWORD }}' ssh -o StrictHostKeyChecking=no root@$VPN_IP 'bash -s' < /tmp/generate_vpn.sh || echo 'Client config generation will be available shortly'
+
+      - name: Capture OpenVPN Configuration Details
+        id: vpn_config
+        run: |
+          VPN_IP="${{ steps.vpn_details.outputs.vpn_ip }}"
+          
+          echo "vpn_server_ip=$VPN_IP" >> $GITHUB_OUTPUT
+          echo "vpn_port=1194" >> $GITHUB_OUTPUT
+          echo "vpn_protocol=udp" >> $GITHUB_OUTPUT
+          echo "encryption=AES-256-GCM" >> $GITHUB_OUTPUT
+          echo "auth_algorithm=SHA256" >> $GITHUB_OUTPUT
+          echo "key_size=2048" >> $GITHUB_OUTPUT
+          echo "deployment_time=$(date -u)" >> $GITHUB_OUTPUT
+          echo "server_region=us-east" >> $GITHUB_OUTPUT
+          echo "instance_type=g6-nanode-1" >> $GITHUB_OUTPUT
+
+      - name: Send Email with VPN Details
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "🔐 Your Linode VPN Server has been RECREATED"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            🎉 SUCCESS! Your Linode OpenVPN Server has been DESTROYED and RECREATED!
+            ========================================================================
+
+            The old VPN server was destroyed and a fresh instance has been deployed.
+            Deployment completed at: ${{ steps.vpn_config.outputs.deployment_time }}
+
+            🌐 NEW SERVER DETAILS
+            =====================
+            Server IP: ${{ steps.vpn_config.outputs.vpn_server_ip }}
+            Region: Newark, NJ (us-east)
+            Instance Type: ${{ steps.vpn_config.outputs.instance_type }}
+            Monthly Cost: ~$5 USD
+
+            🔒 OPENVPN CONFIGURATION
+            ========================
+            VPN Server IP: ${{ steps.vpn_config.outputs.vpn_server_ip }}
+            Port: ${{ steps.vpn_config.outputs.vpn_port }}
+            Protocol: ${{ steps.vpn_config.outputs.vpn_protocol }}
+            Encryption: ${{ steps.vpn_config.outputs.encryption }}
+
+            ⚠️ IMPORTANT: Old client configurations will NO LONGER WORK!
+            You must generate new client configurations for all your devices.
+
+            🔧 GENERATE NEW CLIENT CONFIGS
+            ==============================
+            SSH to your server:
+            ssh root@${{ steps.vpn_config.outputs.vpn_server_ip }}
+
+            Generate new configurations:
+            docker exec openvpn-server /usr/local/bin/generate-client.sh my-iphone
+            docker exec openvpn-server /usr/local/bin/generate-client.sh my-android
+            docker exec openvpn-server /usr/local/bin/generate-client.sh my-laptop
+
+            View generated configs:
+            cat /tmp/openvpn-clients/[device-name].ovpn
+
+            🛡️ PI-HOLE AD-BLOCKING DASHBOARD
+            =================================
+            URL: http://${{ steps.vpn_config.outputs.vpn_server_ip }}/admin
+
+            ---
+            Server recreated via GitHub Actions on ${{ steps.vpn_config.outputs.deployment_time }}
