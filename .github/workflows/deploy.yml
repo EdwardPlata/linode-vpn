@@ -1,0 +1,342 @@
+---
+name: "Smart VPN Deploy"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force destroy and rebuild instance'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  INSTANCE_LABEL: "personal-vpn-server"
+
+jobs:
+  check-instance:
+    name: "Check Existing Instance"
+    runs-on: ubuntu-latest
+    outputs:
+      instance_exists: ${{ steps.check.outputs.exists }}
+      instance_ip: ${{ steps.check.outputs.ip }}
+      instance_id: ${{ steps.check.outputs.id }}
+    
+    steps:
+      - name: Install Linode CLI
+        run: pip install linode-cli
+
+      - name: Check for Existing Instance
+        id: check
+        env:
+          LINODE_CLI_TOKEN: ${{ secrets.LINODE_PAT }}
+        run: |
+          echo "🔍 Checking for existing VPN instance..."
+          
+          INSTANCE_DATA=$(linode-cli linodes list --label "${{ env.INSTANCE_LABEL }}" --json 2>/dev/null || echo "[]")
+          
+          if [ "$INSTANCE_DATA" != "[]" ] && [ -n "$INSTANCE_DATA" ]; then
+            INSTANCE_IP=$(echo "$INSTANCE_DATA" | jq -r '.[0].ipv4[0]')
+            INSTANCE_ID=$(echo "$INSTANCE_DATA" | jq -r '.[0].id')
+            INSTANCE_STATUS=$(echo "$INSTANCE_DATA" | jq -r '.[0].status')
+            
+            echo "✅ Found existing instance!"
+            echo "   ID: $INSTANCE_ID"
+            echo "   IP: $INSTANCE_IP"
+            echo "   Status: $INSTANCE_STATUS"
+            
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
+            echo "id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ No existing instance found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "ip=" >> $GITHUB_OUTPUT
+            echo "id=" >> $GITHUB_OUTPUT
+          fi
+
+  update-existing:
+    name: "Update Existing Instance"
+    runs-on: ubuntu-latest
+    needs: check-instance
+    if: needs.check-instance.outputs.instance_exists == 'true' && github.event.inputs.force_rebuild != 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y sshpass
+
+      - name: Update Docker Files on Server
+        env:
+          VPN_IP: ${{ needs.check-instance.outputs.instance_ip }}
+          ROOT_PASSWORD: ${{ secrets.ROOT_PASSWORD }}
+        run: |
+          echo "📦 Updating Docker configuration on existing server..."
+          
+          # Add to known hosts
+          mkdir -p ~/.ssh
+          ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          # Create tarball of docker files
+          tar -czf /tmp/docker-files.tar.gz -C docker .
+          
+          # Copy updated files to server
+          echo "📤 Copying updated Docker files..."
+          sshpass -p "$ROOT_PASSWORD" scp -o StrictHostKeyChecking=no \
+            /tmp/docker-files.tar.gz root@$VPN_IP:/tmp/
+          
+          # Extract and redeploy
+          echo "🔄 Redeploying containers with updated configuration..."
+          sshpass -p "$ROOT_PASSWORD" ssh -o StrictHostKeyChecking=no root@$VPN_IP << 'REMOTE'
+          set -e
+          
+          echo "Extracting updated files..."
+          cd /opt/openvpn
+          tar -xzf /tmp/docker-files.tar.gz --overwrite
+          chmod +x *.sh
+          
+          echo "Stopping existing containers..."
+          docker-compose down || true
+          
+          echo "Rebuilding and starting containers..."
+          docker-compose build --no-cache
+          docker-compose up -d
+          
+          echo "Waiting for services..."
+          sleep 30
+          
+          echo "Container status:"
+          docker ps
+          
+          echo "✅ Update complete!"
+          REMOTE
+          
+          echo ""
+          echo "✅ Docker configuration updated successfully!"
+
+      - name: Verify Services
+        env:
+          VPN_IP: ${{ needs.check-instance.outputs.instance_ip }}
+          ROOT_PASSWORD: ${{ secrets.ROOT_PASSWORD }}
+        run: |
+          echo "🔍 Verifying services are running..."
+          
+          sshpass -p "$ROOT_PASSWORD" ssh -o StrictHostKeyChecking=no root@$VPN_IP << 'REMOTE'
+          echo "=== Docker Containers ==="
+          docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          
+          echo ""
+          echo "=== OpenVPN Status ==="
+          docker logs openvpn-server --tail 10 2>/dev/null || echo "Waiting for OpenVPN..."
+          
+          echo ""
+          echo "=== Pi-hole Status ==="
+          docker logs pihole --tail 5 2>/dev/null || echo "Waiting for Pi-hole..."
+          REMOTE
+
+      - name: Output Connection Info
+        id: vpn_config
+        run: |
+          VPN_IP="${{ needs.check-instance.outputs.instance_ip }}"
+          echo "vpn_server_ip=$VPN_IP" >> $GITHUB_OUTPUT
+          echo "vpn_port=1194" >> $GITHUB_OUTPUT
+          echo "vpn_protocol=udp" >> $GITHUB_OUTPUT
+          echo "deployment_time=$(date -u)" >> $GITHUB_OUTPUT
+          echo "deployment_type=update" >> $GITHUB_OUTPUT
+
+      - name: Send Update Notification Email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "🔄 VPN Server Updated - Configuration Refreshed"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            🔄 VPN Server Configuration Updated!
+            =====================================
+
+            Your existing VPN server has been updated with the latest configuration.
+            Update completed at: ${{ steps.vpn_config.outputs.deployment_time }}
+
+            🌐 SERVER DETAILS (unchanged)
+            =============================
+            Server IP: ${{ needs.check-instance.outputs.instance_ip }}
+            Port: 1194/UDP
+            
+            🛡️ PI-HOLE DASHBOARD
+            URL: http://${{ needs.check-instance.outputs.instance_ip }}/admin
+
+            ℹ️ YOUR EXISTING CLIENT CONFIGURATIONS STILL WORK!
+            No need to regenerate .ovpn files unless you want new devices.
+
+            🔧 To generate new client configs:
+            ssh root@${{ needs.check-instance.outputs.instance_ip }}
+            docker exec openvpn-server /usr/local/bin/generate-client.sh <device-name>
+
+  deploy-new:
+    name: "Deploy New Instance"
+    runs-on: ubuntu-latest
+    needs: check-instance
+    if: needs.check-instance.outputs.instance_exists == 'false' || github.event.inputs.force_rebuild == 'true'
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.0.0
+          terraform_wrapper: true
+
+      - name: Delete Existing Instance (if force rebuild)
+        if: github.event.inputs.force_rebuild == 'true' && needs.check-instance.outputs.instance_exists == 'true'
+        env:
+          LINODE_CLI_TOKEN: ${{ secrets.LINODE_PAT }}
+        run: |
+          pip install linode-cli
+          echo "🗑️ Force rebuild requested. Deleting existing instance..."
+          linode-cli linodes delete ${{ needs.check-instance.outputs.instance_id }}
+          echo "✅ Instance deleted. Waiting for cleanup..."
+          sleep 10
+
+      - name: Validate SSH Public Key
+        run: |
+          echo "Checking SSH public key format..."
+          if [ -z "${{ secrets.SSH_PUBLIC_KEY }}" ]; then
+            echo "❌ ERROR: SSH_PUBLIC_KEY secret is not set"
+            exit 1
+          fi
+
+          if echo "${{ secrets.SSH_PUBLIC_KEY }}" | grep -E "^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp)" > /dev/null; then
+            echo "✅ SSH public key format valid"
+          else
+            echo "❌ ERROR: Invalid SSH key format"
+            exit 1
+          fi
+
+      - name: Terraform Init
+        run: terraform init
+        env:
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        env:
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+          TF_VAR_linode_api_token: ${{ secrets.LINODE_PAT }}
+          TF_VAR_root_password: ${{ secrets.ROOT_PASSWORD }}
+          TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_region: "us-east"
+          TF_VAR_instance_type: "g6-nanode-1"
+
+      - name: Capture VPN Details
+        id: vpn_details
+        run: |
+          VPN_IP=$(terraform output -raw vpn_server_ip)
+          echo "vpn_ip=$VPN_IP" >> $GITHUB_OUTPUT
+          echo "✅ VPN Server IP: $VPN_IP"
+        env:
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+
+      - name: Wait for Initialization
+        run: |
+          echo "⏳ Waiting 90 seconds for server to fully initialize..."
+          sleep 90
+
+      - name: Generate Client Configuration
+        run: |
+          VPN_IP="${{ steps.vpn_details.outputs.vpn_ip }}"
+          
+          sudo apt-get update -qq && sudo apt-get install -y sshpass
+          ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          sshpass -p "${{ secrets.ROOT_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@$VPN_IP << 'REMOTE' || true
+          for i in {1..30}; do
+            docker ps | grep -q openvpn-server && break
+            echo "Waiting for OpenVPN... ($i/30)"
+            sleep 10
+          done
+          docker exec openvpn-server /usr/local/bin/generate-client.sh mobile-device || true
+          ls -la /tmp/openvpn-clients/ 2>/dev/null || echo "Configs pending"
+          REMOTE
+
+      - name: Output Connection Info
+        id: vpn_config
+        run: |
+          echo "vpn_server_ip=${{ steps.vpn_details.outputs.vpn_ip }}" >> $GITHUB_OUTPUT
+          echo "vpn_port=1194" >> $GITHUB_OUTPUT
+          echo "vpn_protocol=udp" >> $GITHUB_OUTPUT
+          echo "encryption=AES-256-GCM" >> $GITHUB_OUTPUT
+          echo "deployment_time=$(date -u)" >> $GITHUB_OUTPUT
+          echo "deployment_type=new" >> $GITHUB_OUTPUT
+
+      - name: Send New Deployment Email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "🔐 NEW VPN Server Deployed - Connection Details"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            🎉 NEW VPN Server Deployed Successfully!
+            =========================================
+
+            A fresh VPN server has been created and configured.
+            Deployment completed at: ${{ steps.vpn_config.outputs.deployment_time }}
+
+            🌐 SERVER DETAILS
+            =================
+            Server IP: ${{ steps.vpn_config.outputs.vpn_server_ip }}
+            Region: Newark, NJ (us-east)
+            Monthly Cost: ~$5 USD
+
+            🔒 OPENVPN CONFIGURATION
+            ========================
+            Port: ${{ steps.vpn_config.outputs.vpn_port }}/UDP
+            Encryption: ${{ steps.vpn_config.outputs.encryption }}
+            DNS: Pi-hole (ad-blocking enabled)
+
+            🛡️ PI-HOLE DASHBOARD
+            URL: http://${{ steps.vpn_config.outputs.vpn_server_ip }}/admin
+
+            📱 QUICK START
+            ==============
+            1. SSH to server:
+               ssh root@${{ steps.vpn_config.outputs.vpn_server_ip }}
+
+            2. Generate client config:
+               docker exec openvpn-server /usr/local/bin/generate-client.sh my-iphone
+               docker exec openvpn-server /usr/local/bin/generate-client.sh my-laptop
+
+            3. View config:
+               cat /tmp/openvpn-clients/<device-name>.ovpn
+
+            4. Download OpenVPN Connect app and import .ovpn file
+
+            🗑️ TO DESTROY (when done testing):
+               Go to GitHub Actions → "Smart VPN Deploy" → Run with force_rebuild=true
+               Or: ssh to server, cd /opt && terraform destroy
+
+            ---
+            Deployed via GitHub Actions

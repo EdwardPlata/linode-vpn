@@ -42,6 +42,31 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
+# Disable systemd-resolved to free up port 53 for Pi-hole
+print_status "Checking if systemd-resolved is using port 53..."
+if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+    print_warning "systemd-resolved is running and using port 53. Disabling it for Pi-hole..."
+    
+    # Stop systemd-resolved
+    systemctl stop systemd-resolved || true
+    systemctl disable systemd-resolved || true
+    
+    # Update resolv.conf to use external DNS temporarily
+    rm -f /etc/resolv.conf
+    echo "nameserver 1.1.1.1" > /etc/resolv.conf
+    echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+    
+    print_status "systemd-resolved disabled. Using Cloudflare DNS temporarily."
+fi
+
+# Also check if anything else is using port 53
+if command -v lsof &> /dev/null && lsof -i :53 2>/dev/null | grep -q LISTEN; then
+    print_warning "Port 53 is still in use. Attempting to free it..."
+    fuser -k 53/tcp 2>/dev/null || true
+    fuser -k 53/udp 2>/dev/null || true
+    sleep 2
+fi
+
 # Get server IP
 if [ -z "$OPENVPN_PUBLIC_IP" ]; then
     SERVER_IP=$(curl -s ifconfig.me)

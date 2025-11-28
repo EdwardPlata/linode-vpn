@@ -1,12 +1,14 @@
 ---
-name: "Terraform Deploy"
+name: "Terraform Deploy (Legacy)"
 
+# DEPRECATED: Use "Smart VPN Deploy" workflow instead
+# This workflow is kept for reference but disabled
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "legacy" to run this deprecated workflow'
+        required: true
 
 permissions:
   contents: read
