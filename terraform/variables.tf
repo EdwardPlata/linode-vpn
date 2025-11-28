@@ -69,3 +69,10 @@ variable "tags" {
   type        = list(string)
   default     = ["personal-vpn"]
 }
+
+variable "pihole_password" {
+  description = "Password for Pi-hole web admin interface"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

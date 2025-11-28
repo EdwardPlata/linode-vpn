@@ -83,6 +83,7 @@ jobs:
         env:
           VPN_IP: ${{ needs.check-instance.outputs.instance_ip }}
           ROOT_PASSWORD: ${{ secrets.ROOT_PASSWORD }}
+          PIHOLE_PASSWORD: ${{ secrets.PIHOLE_PASSWORD }}
         run: |
           echo "📦 Updating Docker configuration on existing server..."
           
@@ -104,13 +105,17 @@ jobs:
           
           # Extract and redeploy
           echo "🔄 Redeploying containers with updated configuration..."
-          sshpass -p "$ROOT_PASSWORD" ssh -o StrictHostKeyChecking=no root@$VPN_IP << 'REMOTE'
+          sshpass -p "$ROOT_PASSWORD" ssh -o StrictHostKeyChecking=no root@$VPN_IP << REMOTE
           set -e
           
           echo "Extracting updated files..."
           cd /opt/openvpn
           tar -xzf /tmp/docker-files.tar.gz --overwrite
           chmod +x *.sh
+          
+          # Update .env with Pi-hole password
+          echo "SERVER_IP=$VPN_IP" >> .env
+          echo "PIHOLE_PASSWORD=$PIHOLE_PASSWORD" >> .env
           
           echo "Stopping existing containers..."
           docker-compose down || true
@@ -119,8 +124,13 @@ jobs:
           docker-compose build --no-cache
           docker-compose up -d
           
+          # Set Pi-hole password directly
+          echo "Setting Pi-hole admin password..."
+          sleep 10
+          docker exec pihole pihole -a -p "$PIHOLE_PASSWORD" || true
+          
           echo "Waiting for services..."
-          sleep 30
+          sleep 20
           
           echo "Container status:"
           docker ps
@@ -259,6 +269,7 @@ jobs:
           TF_VAR_linode_api_token: ${{ secrets.LINODE_PAT }}
           TF_VAR_root_password: ${{ secrets.ROOT_PASSWORD }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_pihole_password: ${{ secrets.PIHOLE_PASSWORD }}
           TF_VAR_instance_label: ${{ env.INSTANCE_LABEL }}
           TF_VAR_region: "us-east"
           TF_VAR_instance_type: "g6-nanode-1"

@@ -67,6 +67,8 @@ resource "linode_instance" "vpn_server" {
       "echo \"OPENVPN_PUBLIC_IP=${self.ip_address}\" > .env",
       "echo \"OPENVPN_PORT=1194\" >> .env",
       "echo \"OPENVPN_PROTOCOL=udp\" >> .env",
+      "echo \"SERVER_IP=${self.ip_address}\" >> .env",
+      "echo \"PIHOLE_PASSWORD=${var.pihole_password}\" >> .env",
       "./deploy-docker.sh",
     ]
     connection {
