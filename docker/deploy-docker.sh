@@ -126,6 +126,13 @@ if [ "$PIHOLE_READY" = false ]; then
     exit 1
 fi
 
+# Set Pi-hole password explicitly (overrides the random generated one)
+PIHOLE_PASS=$(grep PIHOLE_PASSWORD .env | cut -d '=' -f2)
+if [ -n "$PIHOLE_PASS" ]; then
+    print_status "Setting Pi-hole admin password..."
+    docker-compose exec -T pihole pihole -a -p "$PIHOLE_PASS" || print_warning "Could not set Pi-hole password"
+fi
+
 print_status "Waiting for OpenVPN to be ready..."
 sleep 15
 
