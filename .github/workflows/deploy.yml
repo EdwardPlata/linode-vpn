@@ -11,11 +11,15 @@ on:
       force_rebuild:
         description: 'Force destroy and rebuild instance'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 permissions:
   contents: read
+
+concurrency:
+  group: vpn-deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   INSTANCE_LABEL: "personal-vpn-server"
@@ -82,9 +86,13 @@ jobs:
         run: |
           echo "📦 Updating Docker configuration on existing server..."
           
-          # Add to known hosts
+          # Add to known hosts with retry logic
           mkdir -p ~/.ssh
-          ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts 2>/dev/null || true
+          for i in {1..5}; do
+            ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts 2>/dev/null && break
+            echo "Waiting for SSH to be available... (attempt $i/5)"
+            sleep 10
+          done
           
           # Create tarball of docker files
           tar -czf /tmp/docker-files.tar.gz -C docker .
@@ -154,6 +162,7 @@ jobs:
           echo "deployment_type=update" >> $GITHUB_OUTPUT
 
       - name: Send Update Notification Email
+        continue-on-error: true
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -202,8 +211,8 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.0.0
-          terraform_wrapper: true
+          terraform_version: "~> 1.6"
+          terraform_wrapper: false
 
       - name: Delete Existing Instance (if force rebuild)
         if: github.event.inputs.force_rebuild == 'true' && needs.check-instance.outputs.instance_exists == 'true'
@@ -217,14 +226,16 @@ jobs:
           sleep 10
 
       - name: Validate SSH Public Key
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           echo "Checking SSH public key format..."
-          if [ -z "${{ secrets.SSH_PUBLIC_KEY }}" ]; then
+          if [ -z "$SSH_PUBLIC_KEY" ]; then
             echo "❌ ERROR: SSH_PUBLIC_KEY secret is not set"
             exit 1
           fi
 
-          if echo "${{ secrets.SSH_PUBLIC_KEY }}" | grep -E "^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp)" > /dev/null; then
+          if echo "$SSH_PUBLIC_KEY" | grep -qE "^(ssh-rsa|ssh-dss|ssh-ed25519|ecdsa-sha2-nistp)"; then
             echo "✅ SSH public key format valid"
           else
             echo "❌ ERROR: Invalid SSH key format"
@@ -236,6 +247,11 @@ jobs:
         env:
           LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
 
+      - name: Terraform Validate
+        run: terraform validate
+        env:
+          LINODE_TOKEN: ${{ secrets.LINODE_PAT }}
+
       - name: Terraform Apply
         run: terraform apply -auto-approve
         env:
@@ -243,6 +259,7 @@ jobs:
           TF_VAR_linode_api_token: ${{ secrets.LINODE_PAT }}
           TF_VAR_root_password: ${{ secrets.ROOT_PASSWORD }}
           TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          TF_VAR_instance_label: ${{ env.INSTANCE_LABEL }}
           TF_VAR_region: "us-east"
           TF_VAR_instance_type: "g6-nanode-1"
 
@@ -261,13 +278,22 @@ jobs:
           sleep 90
 
       - name: Generate Client Configuration
+        env:
+          ROOT_PASSWORD: ${{ secrets.ROOT_PASSWORD }}
         run: |
           VPN_IP="${{ steps.vpn_details.outputs.vpn_ip }}"
           
           sudo apt-get update -qq && sudo apt-get install -y sshpass
-          ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          # Add to known hosts with retry logic
+          mkdir -p ~/.ssh
+          for i in {1..5}; do
+            ssh-keyscan -H $VPN_IP >> ~/.ssh/known_hosts 2>/dev/null && break
+            echo "Waiting for SSH to be available... (attempt $i/5)"
+            sleep 10
+          done
 
-          sshpass -p "${{ secrets.ROOT_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@$VPN_IP << 'REMOTE' || true
+          timeout 300 sshpass -p "$ROOT_PASSWORD" ssh -o StrictHostKeyChecking=no root@$VPN_IP << 'REMOTE' || true
           for i in {1..30}; do
             docker ps | grep -q openvpn-server && break
             echo "Waiting for OpenVPN... ($i/30)"
@@ -288,6 +314,7 @@ jobs:
           echo "deployment_type=new" >> $GITHUB_OUTPUT
 
       - name: Send New Deployment Email
+        continue-on-error: true
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
